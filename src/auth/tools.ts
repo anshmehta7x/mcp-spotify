@@ -27,7 +27,7 @@ const getAuthLinkTool = {
     name:"get-auth-link",
     config:
     {
-        title: "Get Auth Link",
+        title: "Get Auth Link IN TERMINAL",
             description:
         "Get the Spotify authentication link for Users who are not authenticated, which the user must visit to authenticate.THE LINK MUST BE COPIED FROM TERMINAL, DO NOT INCLUDE SPACES",
             inputSchema: {},
