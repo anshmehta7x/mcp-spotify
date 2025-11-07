@@ -1,7 +1,55 @@
 import {SpotifyUserProfile} from "../../types/user.js";
-import {getCurrentUserProfile, getCurrentUserTopItems, getUserProfile} from "./requests.js";
-
+import {getCurrentUserProfile, getCurrentUserTopItems, getUserProfile, followOrUnfollowPlaylist} from "./requests.js";
 import { z } from "zod";
+
+const FollowOrUnfollowPlaylistInputRawShape = {
+    playlistId: z.string().min(1, "Playlist ID cannot be empty"),
+    follow: z.boolean().optional()  // default follow = true
+};
+
+const FollowOrUnfollowPlaylistInputSchema = z.object(FollowOrUnfollowPlaylistInputRawShape);
+
+type FollowOrUnfollowPlaylistInput = z.infer<typeof FollowOrUnfollowPlaylistInputSchema>;
+
+export const followOrUnfollowPlaylistTool = {
+    name: "follow-or-unfollow-playlist",
+    config: {
+        title: "Follow or Unfollow Playlist",
+        description: "Follow or unfollow a Spotify playlist to User's profile by its ID.",
+        inputSchema: FollowOrUnfollowPlaylistInputRawShape,
+        authenticationRequired: true
+    },
+
+    handler: async (input: FollowOrUnfollowPlaylistInput) => {
+        try {
+            const follow = input.follow ?? true; // default = follow
+            const result = await followOrUnfollowPlaylist(input.playlistId, follow);
+
+            if (!result.success) {
+                throw new Error(result.error || "Unknown follow/unfollow error");
+            }
+
+            const response = {
+                message: follow
+                    ? `Successfully followed playlist ${input.playlistId}`
+                    : `Successfully unfollowed playlist ${input.playlistId}`,
+                playlistId: input.playlistId,
+                action: follow ? "followed" : "unfollowed"
+            };
+
+            return {
+                content: [{ type: "text", text: JSON.stringify(response) } as const],
+                structuredContent: response
+            };
+        } catch (error) {
+            const errorMessage =
+                error instanceof Error ? error.message : "Unknown error occurred";
+
+            throw new Error(`Failed to follow/unfollow playlist: ${errorMessage}`);
+        }
+    }
+};
+
 
 const UserProfileInputRawShape = {
     userId: z.string().min(1, "User ID cannot be empty"),
@@ -27,7 +75,7 @@ export const getUserProfileTool = {
             }
 
             return {
-                content: [{ type: "text" as const, text: JSON.stringify(profile) }],
+                content: [{ type: "text", text: JSON.stringify(profile) } as const],
                 structuredContent: profile,
             };
         }

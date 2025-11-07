@@ -98,3 +98,37 @@ export async function getCurrentUserTopItems(
         throw new Error("Failed to fetch user top items");
     }
 }
+
+export async function followOrUnfollowPlaylist(playlistId: string, follow: boolean) {
+    if (!authservice.isAuthenticated()) {
+        throw new Error("User is not authenticated");
+    }
+    if(follow){
+        try {
+            await axios.put(`https://api.spotify.com/v1/playlists/${playlistId}/followers`, {}, {
+                headers: {
+                    Authorization: `Bearer ${authservice.getAccessToken()}`,
+                }
+            });
+            return { success: true };
+        } catch (error) {
+            return { success: false, error: "Failed to follow playlist" };
+        }
+    }
+    else{
+        try {
+            await axios.delete(`https://api.spotify.com/v1/playlists/${playlistId}/followers`, {
+                headers: {
+                    Authorization: `Bearer ${authservice.getAccessToken()}`,
+                }
+            });
+            return { success: true };
+        }
+        catch (error) {
+            return {
+                success: false, error: "Failed to unfollow playlist"
+
+            };
+        }
+    }
+}

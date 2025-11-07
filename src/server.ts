@@ -5,7 +5,12 @@ import {
 
 import { z } from "zod";
 import { AuthService } from "./auth/authservice.js";
-import {getCurrentUserProfileTool, getCurrentUserTopItemsTool, getUserProfileTool} from "./mcp/user/tools.js";
+import {
+    followOrUnfollowPlaylistTool,
+    getCurrentUserProfileTool,
+    getCurrentUserTopItemsTool,
+    getUserProfileTool
+} from "./mcp/user/tools.js";
 
 export const spotifyMcpServer = new McpServer({
     name: "mcp-spotify",
@@ -32,6 +37,12 @@ spotifyMcpServer.registerTool(
     getUserProfileTool.name,
     getUserProfileTool.config,
     getUserProfileTool.handler
+)
+
+spotifyMcpServer.registerTool(
+    followOrUnfollowPlaylistTool.name,
+    followOrUnfollowPlaylistTool.config,
+    followOrUnfollowPlaylistTool.handler
 )
 
 spotifyMcpServer.registerTool(
