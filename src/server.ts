@@ -1,18 +1,11 @@
 import {
     McpServer,
-    ResourceTemplate,
 } from "@modelcontextprotocol/sdk/server/mcp.js";
 
-import {
-    SpotifyUserProfile,
-    SpotifyUserProfileSchema,
-    SpotifyUserProfileShape,
-} from "./types/user.js";
 
 import { z } from "zod";
 import { AuthService } from "./auth/authservice.js";
-import { getCurrentUserProfile } from "./mcp/user.js";
-// import { getCurrentUserProfile } from "./mcp/user/requests.js";
+import {getCurrentUserProfileTool, getCurrentUserTopItemsTool, getUserProfileTool} from "./mcp/user/tools.js";
 
 export const spotifyMcpServer = new McpServer({
     name: "mcp-spotify",
@@ -21,23 +14,25 @@ export const spotifyMcpServer = new McpServer({
 
 const authService = AuthService.getInstance();
 
+const tools = [getCurrentUserProfileTool, getCurrentUserTopItemsTool,getUserProfileTool];
+
 spotifyMcpServer.registerTool(
-    "get-current-user-profile",
-    {
-        title: "Get Current User Profile",
-        description:
-            "(REQUIRES AUTHENTICATION) Get detailed profile information about the current user (including the current user's username, country, email, explicit_content,followers,images,url,uri",
-        inputSchema: {},
-        outputSchema: { structuredContent: SpotifyUserProfileSchema },
-    },
-    async () => {
-        const profile: SpotifyUserProfile = await getCurrentUserProfile();
-        return {
-            content: [{ type: "text", text: JSON.stringify(profile) }],
-            structuredContent: profile,
-        };
-    },
+    getCurrentUserProfileTool.name,
+    getCurrentUserProfileTool.config,
+    getCurrentUserProfileTool.handler
 );
+
+spotifyMcpServer.registerTool(
+    getCurrentUserTopItemsTool.name,
+    getCurrentUserTopItemsTool.config,
+    getCurrentUserTopItemsTool.handler
+)
+
+spotifyMcpServer.registerTool(
+    getUserProfileTool.name,
+    getUserProfileTool.config,
+    getUserProfileTool.handler
+)
 
 spotifyMcpServer.registerTool(
     "is-authenticated",
@@ -62,7 +57,7 @@ spotifyMcpServer.registerTool(
     {
         title: "Get Auth Link",
         description:
-            "Get the Spotify authentication link for Users who are not authenticated, which the user must visit to authenticate.",
+            "Get the Spotify authentication link for Users who are not authenticated, which the user must visit to authenticate.THE LINK MUST BE COPIED FROM TERMINAL, DO NOT INCLUDE SPACES",
         inputSchema: {},
         outputSchema: { authLink: z.string() },
     },
@@ -76,20 +71,3 @@ spotifyMcpServer.registerTool(
     },
 );
 
-// spotifyMcpServer.registerTool(
-//     "get-current-user-details",
-//     {
-//         title: "Get Current User Details",
-//         description:
-//             "Gets information about the current user's profile on spotify",
-//         inputSchema: {},
-//         outputSchema: SpotifyUserProfileShape,
-//     },
-//     async () => {
-//         const profile = await getCurrentUserProfile(process.env.SPOTIFY_TOKEN);
-//         return {
-//             content: [{ type: "text", text: JSON.stringify(profile) }],
-//             structuredContent: profile,
-//         };
-//     },
-// );
