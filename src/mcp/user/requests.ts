@@ -132,3 +132,159 @@ export async function followOrUnfollowPlaylist(playlistId: string, follow: boole
         }
     }
 }
+
+export async function getFollowedArtists(
+    type: "artist",
+    after?: string,
+    limit?: number
+) {
+    if (!authservice.isAuthenticated()) {
+        throw new Error("User is not authenticated");
+    }
+
+    const finalLimit = (limit && limit >= 1 && limit <= 50) ? limit : 20;
+
+    try {
+        const result = await axios.get("https://api.spotify.com/v1/me/following", {
+            headers: {
+                Authorization: `Bearer ${authservice.getAccessToken()}`
+            },
+            params: {
+                type,
+                after,
+                limit: finalLimit
+            }
+        });
+
+        return {
+            href: result.data.artists.href,
+            limit: result.data.artists.limit,
+            next: result.data.artists.next,
+            cursors: result.data.artists.cursors,
+            total: result.data.artists.total,
+            items: result.data.artists.items.map((artist: any) => ({
+                external_urls: artist.external_urls,
+                followers: artist.followers,
+                genres: artist.genres,
+                href: artist.href,
+                id: artist.id,
+                images: artist.images,
+                name: artist.name,
+                popularity: artist.popularity,
+                type: artist.type,
+                uri: artist.uri
+            }))
+        };
+    } catch (error) {
+        throw new Error("Failed to fetch followed artists");
+    }
+}
+
+export async function followArtistsOrUsers(
+    type: "artist" | "user",
+    ids: string
+) {
+    if (!authservice.isAuthenticated()) {
+        throw new Error("User is not authenticated");
+    }
+
+    try {
+        await axios.put(
+            "https://api.spotify.com/v1/me/following",
+            {
+                ids: ids.split(",").map(id => id.trim())
+            },
+            {
+                headers: {
+                    Authorization: `Bearer ${authservice.getAccessToken()}`,
+                    "Content-Type": "application/json"
+                },
+                params: {
+                    type
+                }
+            }
+        );
+        return { success: true };
+    } catch (error) {
+        return {
+            success: false,
+            error: `Failed to follow ${type}(s)`
+        };
+    }
+}
+
+export async function unfollowArtistsOrUsers(
+    type: "artist" | "user",
+    ids: string
+) {
+    if (!authservice.isAuthenticated()) {
+        throw new Error("User is not authenticated");
+    }
+
+    try {
+        await axios.delete("https://api.spotify.com/v1/me/following", {
+            headers: {
+                Authorization: `Bearer ${authservice.getAccessToken()}`,
+                "Content-Type": "application/json"
+            },
+            params: {
+                type
+            },
+            data: {
+                ids: ids.split(",").map(id => id.trim())
+            }
+        });
+        return { success: true };
+    } catch (error) {
+        return {
+            success: false,
+            error: `Failed to unfollow ${type}(s)`
+        };
+    }
+}
+
+export async function checkIfUserFollows(
+    type: "artist" | "user",
+    ids: string
+) {
+    if (!authservice.isAuthenticated()) {
+        throw new Error("User is not authenticated");
+    }
+
+    try {
+        const result = await axios.get("https://api.spotify.com/v1/me/following/contains", {
+            headers: {
+                Authorization: `Bearer ${authservice.getAccessToken()}`
+            },
+            params: {
+                type,
+                ids
+            }
+        });
+
+        return result.data;
+    } catch (error) {
+        throw new Error("Failed to check follow status");
+    }
+}
+
+export async function checkIfCurrentUserFollowsPlaylist(playlistId: string) {
+    if (!authservice.isAuthenticated()) {
+        throw new Error("User is not authenticated");
+    }
+
+    try {
+        const result = await axios.get(
+            `https://api.spotify.com/v1/playlists/${playlistId}/followers/contains`,
+            {
+                headers: {
+                    Authorization: `Bearer ${authservice.getAccessToken()}`
+                }
+            }
+        );
+
+        return result.data[0];
+    } catch (error) {
+        throw new Error("Failed to check playlist follow status");
+    }
+}
