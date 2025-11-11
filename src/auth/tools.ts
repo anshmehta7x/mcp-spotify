@@ -35,7 +35,7 @@ const getAuthLinkTool = {
     },
     handler:
 async () => {
-    const authLink = authService.generateAuthLink();
+    const authLink = await authService.generateAuthLink();
     const output = { authLink: authLink };
     return {
         content: [{ type: "text", text: JSON.stringify(output) } as const],

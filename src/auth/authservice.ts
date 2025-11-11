@@ -1,4 +1,5 @@
-import { generateRandomString } from "./utils.js";
+import {generateRandomString, shortenURL} from "./utils.js";
+
 
 export class AuthService {
     private static instance: AuthService;
@@ -22,7 +23,7 @@ export class AuthService {
         return this.authenticated;
     }
 
-    generateAuthLink(): string {
+    async generateAuthLink(): Promise<string> {
         const scopes = [
             // Spotify Connect
             "user-read-playback-state",
@@ -64,7 +65,14 @@ export class AuthService {
             state: state,
         });
 
-        return `https://accounts.spotify.com/authorize?${query_params.toString()}`;
+        const spotifyAuthLink :string = `https://accounts.spotify.com/authorize?${query_params.toString()}`;
+        try{
+            return await shortenURL(spotifyAuthLink);
+        }
+        catch(error){
+            console.error("Error generating short URL:", error);
+            return spotifyAuthLink;
+        }
     }
 
     async receiveToken(code: string, state: string): Promise<boolean> {
@@ -105,7 +113,6 @@ export class AuthService {
             }
             const data = await response.json();
             this.accessToken = data.access_token;
-            console.log("Access Token:", this.accessToken);
             this.setAuthenticated(true);
             return true;
         } catch (error) {

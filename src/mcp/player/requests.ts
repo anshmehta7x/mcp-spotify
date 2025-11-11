@@ -207,3 +207,226 @@ export async function pausePlayback(deviceId?: string) {
         return { success: false, error: "Failed to pause playback" };
     }
 }
+
+export async function skipToNext(deviceId?: string) {
+    if (!authservice.isAuthenticated()) {
+        throw new Error("User is not authenticated");
+    }
+
+    try {
+        await axios.post(
+            `${SPOTIFY_API_BASE}/me/player/next`,
+            {},
+            {
+                headers: {
+                    Authorization: `Bearer ${authservice.getAccessToken()}`,
+                },
+                params: deviceId ? { device_id: deviceId } : undefined
+            }
+        );
+        return { success: true };
+    } catch (error) {
+        return { success: false, error: "Failed to skip to next track" };
+    }
+}
+
+export async function skipToPrevious(deviceId?: string) {
+    if (!authservice.isAuthenticated()) {
+        throw new Error("User is not authenticated");
+    }
+
+    try {
+        await axios.post(
+            `${SPOTIFY_API_BASE}/me/player/previous`,
+            {},
+            {
+                headers: {
+                    Authorization: `Bearer ${authservice.getAccessToken()}`,
+                },
+                params: deviceId ? { device_id: deviceId } : undefined
+            }
+        );
+        return { success: true };
+    } catch (error) {
+        return { success: false, error: "Failed to skip to previous track" };
+    }
+}
+
+export async function seekToPosition(positionMs: number, deviceId?: string) {
+    if (!authservice.isAuthenticated()) {
+        throw new Error("User is not authenticated");
+    }
+
+    try {
+        await axios.put(
+            `${SPOTIFY_API_BASE}/me/player/seek`,
+            {},
+            {
+                headers: {
+                    Authorization: `Bearer ${authservice.getAccessToken()}`,
+                },
+                params: {
+                    position_ms: positionMs,
+                    ...(deviceId && { device_id: deviceId })
+                }
+            }
+        );
+        return { success: true };
+    } catch (error) {
+        return { success: false, error: "Failed to seek to position" };
+    }
+}
+
+export async function setRepeatMode(state: "track" | "context" | "off", deviceId?: string) {
+    if (!authservice.isAuthenticated()) {
+        throw new Error("User is not authenticated");
+    }
+
+    try {
+        await axios.put(
+            `${SPOTIFY_API_BASE}/me/player/repeat`,
+            {},
+            {
+                headers: {
+                    Authorization: `Bearer ${authservice.getAccessToken()}`,
+                },
+                params: {
+                    state: state,
+                    ...(deviceId && { device_id: deviceId })
+                }
+            }
+        );
+        return { success: true };
+    } catch (error) {
+        return { success: false, error: "Failed to set repeat mode" };
+    }
+}
+
+export async function setPlaybackVolume(volumePercent: number, deviceId?: string) {
+    if (!authservice.isAuthenticated()) {
+        throw new Error("User is not authenticated");
+    }
+
+    try {
+        await axios.put(
+            `${SPOTIFY_API_BASE}/me/player/volume`,
+            {},
+            {
+                headers: {
+                    Authorization: `Bearer ${authservice.getAccessToken()}`,
+                },
+                params: {
+                    volume_percent: volumePercent,
+                    ...(deviceId && { device_id: deviceId })
+                }
+            }
+        );
+        return { success: true };
+    } catch (error) {
+        return { success: false, error: "Failed to set playback volume" };
+    }
+}
+
+export async function togglePlaybackShuffle(state: boolean, deviceId?: string) {
+    if (!authservice.isAuthenticated()) {
+        throw new Error("User is not authenticated");
+    }
+
+    try {
+        await axios.put(
+            `${SPOTIFY_API_BASE}/me/player/shuffle`,
+            {},
+            {
+                headers: {
+                    Authorization: `Bearer ${authservice.getAccessToken()}`,
+                },
+                params: {
+                    state: state,
+                    ...(deviceId && { device_id: deviceId })
+                }
+            }
+        );
+        return { success: true };
+    } catch (error) {
+        return { success: false, error: "Failed to toggle playback shuffle" };
+    }
+}
+
+export async function getRecentlyPlayedTracks(limit?: number, after?: number, before?: number) {
+    if (!authservice.isAuthenticated()) {
+        throw new Error("User is not authenticated");
+    }
+
+    try {
+        const result = await axios.get(
+            `${SPOTIFY_API_BASE}/me/player/recently-played`,
+            {
+                headers: {
+                    Authorization: `Bearer ${authservice.getAccessToken()}`,
+                },
+                params: {
+                    limit,
+                    after,
+                    before
+                }
+            }
+        );
+        return {
+            items: result.data.items.map((item: any) => ({
+                track: slimTrack(item.track),
+                played_at: item.played_at,
+                context: item.context
+            }))
+        };
+    } catch (error) {
+        return { success: false, error: "Failed to get recently played tracks" };
+    }
+}
+
+export async function getUserQueue() {
+    if (!authservice.isAuthenticated()) {
+        throw new Error("User is not authenticated");
+    }
+
+    try {
+        const result = await axios.get(
+            `${SPOTIFY_API_BASE}/me/player/queue`,
+            {
+                headers: {
+                    Authorization: `Bearer ${authservice.getAccessToken()}`,
+                }
+            }
+        );
+        return {
+            currently_playing: slimTrack(result.data.currently_playing),
+            queue: result.data.queue.map(slimTrack)
+        };
+    } catch (error) {
+        return { success: false, error: "Failed to get user queue" };
+    }
+}
+
+export async function addItemToPlaybackQueue(uri: string, deviceId?: string) {
+    if (!authservice.isAuthenticated()) {
+        throw new Error("User is not authenticated");
+    }
+
+    try {
+        await axios.post(
+            `${SPOTIFY_API_BASE}/me/player/queue`,
+            {},
+            {
+                headers: {
+                    Authorization: `Bearer ${authservice.getAccessToken()}`,
+                },
+                params: {
+                    uri: uri,
+                    ...(deviceId && { device_id: deviceId })
+                }
+            }
+        );
+        return { success: true };
+    } catch (error) {
+        return { success: false, error: "Failed to add item to playback queue" };
+    }
+}

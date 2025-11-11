@@ -5,12 +5,21 @@ import {
     getAvailableDevices,
     getCurrentlyPlayingTrack,
     startResumePlayback,
-    pausePlayback
+    pausePlayback,
+    skipToNext,
+    skipToPrevious,
+    seekToPosition,
+    setRepeatMode,
+    setPlaybackVolume,
+    togglePlaybackShuffle,
+    getRecentlyPlayedTracks,
+    getUserQueue,
+    addItemToPlaybackQueue
 } from "./requests.js";
 
 const GetPlaybackStateInputRawShape = {
     market: z.string().optional(),
-    additional_types: z.string().optional()
+additional_types: z.string().optional()
 };
 const GetPlaybackStateInputSchema = z.object(GetPlaybackStateInputRawShape);
 type GetPlaybackStateInput = z.infer<typeof GetPlaybackStateInputSchema>;
@@ -232,11 +241,339 @@ const pausePlaybackTool = {
     }
 };
 
+const SkipToNextInputRawShape = {
+    device_id: z.string().optional()
+};
+const SkipToNextInputSchema = z.object(SkipToNextInputRawShape);
+type SkipToNextInput = z.infer<typeof SkipToNextInputSchema>;
+
+const skipToNextTool = {
+    name: "skip-to-next",
+    config: {
+        title: "Skip To Next",
+        description: "Skips to the next track in the user’s queue. Premium only.",
+        inputSchema: SkipToNextInputRawShape,
+        authenticationRequired: true
+    },
+    handler: async (input: SkipToNextInput) => {
+        try {
+            const result = await skipToNext(input.device_id);
+            if (!result.success) {
+                throw new Error(result.error || "Unknown skip to next error");
+            }
+            const response = {
+                message: "Successfully skipped to the next track",
+                action: "next"
+            };
+            return {
+                content: [{ type: "text", text: JSON.stringify(response) } as const],
+                structuredContent: response,
+            };
+        } catch (error) {
+            const errorMessage = error instanceof Error ? error.message : "Unknown error occurred";
+            throw new Error(`Failed to skip to next track: ${errorMessage}`);
+        }
+    }
+};
+
+const SkipToPreviousInputRawShape = {
+    device_id: z.string().optional()
+};
+const SkipToPreviousInputSchema = z.object(SkipToPreviousInputRawShape);
+type SkipToPreviousInput = z.infer<typeof SkipToPreviousInputSchema>;
+
+const skipToPreviousTool = {
+    name: "skip-to-previous",
+    config: {
+        title: "Skip To Previous",
+        description: "Skips to the previous track in the user’s queue. Premium only.",
+        inputSchema: SkipToPreviousInputRawShape,
+        authenticationRequired: true
+    },
+    handler: async (input: SkipToPreviousInput) => {
+        try {
+            const result = await skipToPrevious(input.device_id);
+            if (!result.success) {
+                throw new Error(result.error || "Unknown skip to previous error");
+            }
+            const response = {
+                message: "Successfully skipped to the previous track",
+                action: "previous"
+            };
+            return {
+                content: [{ type: "text", text: JSON.stringify(response) } as const],
+                structuredContent: response,
+            };
+        } catch (error) {
+            const errorMessage = error instanceof Error ? error.message : "Unknown error occurred";
+            throw new Error(`Failed to skip to previous track: ${errorMessage}`);
+        }
+    }
+};
+
+const SeekToPositionInputRawShape = {
+    position_ms: z.number().int().min(0, "Position in milliseconds must be a positive number."),
+    device_id: z.string().optional()
+};
+const SeekToPositionInputSchema = z.object(SeekToPositionInputRawShape);
+type SeekToPositionInput = z.infer<typeof SeekToPositionInputSchema>;
+
+const seekToPositionTool = {
+    name: "seek-to-position",
+    config: {
+        title: "Seek To Position",
+        description: "Seeks to the given position in the user’s currently playing track. Premium only.",
+        inputSchema: SeekToPositionInputRawShape,
+        authenticationRequired: true
+    },
+    handler: async (input: SeekToPositionInput) => {
+        try {
+            const result = await seekToPosition(input.position_ms, input.device_id);
+            if (!result.success) {
+                throw new Error(result.error || "Unknown seek to position error");
+            }
+            const response = {
+                message: `Successfully sought to position ${input.position_ms}ms`,
+                action: "seek"
+            };
+            return {
+                content: [{ type: "text", text: JSON.stringify(response) } as const],
+                structuredContent: response,
+            };
+        } catch (error) {
+            const errorMessage = error instanceof Error ? error.message : "Unknown error occurred";
+            throw new Error(`Failed to seek to position: ${errorMessage}`);
+        }
+    }
+};
+
+const SetRepeatModeInputRawShape = {
+    state: z.enum(["track", "context", "off"], {
+        errorMap: (issue, ctx) => {
+            if (issue.code === z.ZodIssueCode.invalid_enum_value) {
+                return { message: "State must be 'track', 'context', or 'off'." };
+            }
+            return { message: ctx.defaultError };
+        },
+    }),
+    device_id: z.string().optional()
+};
+const SetRepeatModeInputSchema = z.object(SetRepeatModeInputRawShape);
+type SetRepeatModeInput = z.infer<typeof SetRepeatModeInputSchema>;
+
+const setRepeatModeTool = {
+    name: "set-repeat-mode",
+    config: {
+        title: "Set Repeat Mode",
+        description: "Set the repeat mode for the user's playback. Premium only.",
+        inputSchema: SetRepeatModeInputRawShape,
+        authenticationRequired: true
+    },
+    handler: async (input: SetRepeatModeInput) => {
+        try {
+            const result = await setRepeatMode(input.state, input.device_id);
+            if (!result.success) {
+                throw new Error(result.error || "Unknown set repeat mode error");
+            }
+            const response = {
+                message: `Successfully set repeat mode to ${input.state}`,
+                action: "set_repeat_mode"
+            };
+            return {
+                content: [{ type: "text", text: JSON.stringify(response) } as const],
+                structuredContent: response,
+            };
+        } catch (error) {
+            const errorMessage = error instanceof Error ? error.message : "Unknown error occurred";
+            throw new Error(`Failed to set repeat mode: ${errorMessage}`);
+        }
+    }
+};
+
+const SetPlaybackVolumeInputRawShape = {
+    volume_percent: z.number().int().min(0).max(100, "Volume percent must be between 0 and 100 inclusive."),
+    device_id: z.string().optional()
+};
+const SetPlaybackVolumeInputSchema = z.object(SetPlaybackVolumeInputRawShape);
+type SetPlaybackVolumeInput = z.infer<typeof SetPlaybackVolumeInputSchema>;
+
+const setPlaybackVolumeTool = {
+    name: "set-playback-volume",
+    config: {
+        title: "Set Playback Volume",
+        description: "Set the volume for the user’s current playback device. Premium only.",
+        inputSchema: SetPlaybackVolumeInputRawShape,
+        authenticationRequired: true
+    },
+    handler: async (input: SetPlaybackVolumeInput) => {
+        try {
+            const result = await setPlaybackVolume(input.volume_percent, input.device_id);
+            if (!result.success) {
+                throw new Error(result.error || "Unknown set playback volume error");
+            }
+            const response = {
+                message: `Successfully set playback volume to ${input.volume_percent}%`,
+                action: "set_volume"
+            };
+            return {
+                content: [{ type: "text", text: JSON.stringify(response) } as const],
+                structuredContent: response,
+            };
+        } catch (error) {
+            const errorMessage = error instanceof Error ? error.message : "Unknown error occurred";
+            throw new Error(`Failed to set playback volume: ${errorMessage}`);
+        }
+    }
+};
+
+const TogglePlaybackShuffleInputRawShape = {
+    state: z.boolean(),
+    device_id: z.string().optional()
+};
+const TogglePlaybackShuffleInputSchema = z.object(TogglePlaybackShuffleInputRawShape);
+type TogglePlaybackShuffleInput = z.infer<typeof TogglePlaybackShuffleInputSchema>;
+
+const togglePlaybackShuffleTool = {
+    name: "toggle-playback-shuffle",
+    config: {
+        title: "Toggle Playback Shuffle",
+        description: "Toggle shuffle on or off for user’s playback. Premium only.",
+        inputSchema: TogglePlaybackShuffleInputRawShape,
+        authenticationRequired: true
+    },
+    handler: async (input: TogglePlaybackShuffleInput) => {
+        try {
+            const result = await togglePlaybackShuffle(input.state, input.device_id);
+            if (!result.success) {
+                throw new Error(result.error || "Unknown toggle playback shuffle error");
+            }
+            const response = {
+                message: `Successfully set shuffle to ${input.state ? "on" : "off"}`,
+                action: "toggle_shuffle"
+            };
+            return {
+                content: [{ type: "text", text: JSON.stringify(response) } as const],
+                structuredContent: response,
+            };
+        } catch (error) {
+            const errorMessage = error instanceof Error ? error.message : "Unknown error occurred";
+            throw new Error(`Failed to toggle playback shuffle: ${errorMessage}`);
+        }
+    }
+};
+
+const GetRecentlyPlayedTracksInputRawShape = {
+    limit: z.number().int().min(1).max(50).optional(),
+    after: z.number().int().optional(),
+    before: z.number().int().optional()
+};
+const GetRecentlyPlayedTracksInputSchema = z.object(GetRecentlyPlayedTracksInputRawShape);
+type GetRecentlyPlayedTracksInput = z.infer<typeof GetRecentlyPlayedTracksInputSchema>;
+
+const getRecentlyPlayedTracksTool = {
+    name: "get-recently-played-tracks",
+    config: {
+        title: "Get Recently Played Tracks",
+        description: "Get tracks from the current user's recently played tracks. Note: Currently doesn't support podcast episodes.",
+        inputSchema: GetRecentlyPlayedTracksInputRawShape,
+        authenticationRequired: true
+    },
+    handler: async (input: GetRecentlyPlayedTracksInput) => {
+        try {
+            const result = await getRecentlyPlayedTracks(input.limit, input.after, input.before);
+            if (!result.items) {
+                throw new Error(result.error || "Unknown get recently played tracks error");
+            }
+            return {
+                content: [{ type: "text", text: JSON.stringify(result) } as const],
+                structuredContent: result,
+            };
+        } catch (error) {
+            const errorMessage = error instanceof Error ? error.message : "Unknown error occurred";
+            throw new Error(`Failed to get recently played tracks: ${errorMessage}`);
+        }
+    }
+};
+
+const GetUserQueueInputRawShape = {};
+const GetUserQueueInputSchema = z.object(GetUserQueueInputRawShape);
+type GetUserQueueInput = z.infer<typeof GetUserQueueInputSchema>;
+
+const getUserQueueTool = {
+    name: "get-user-queue",
+    config: {
+        title: "Get User's Queue",
+        description: "Get the list of objects that make up the user's queue.",
+        inputSchema: GetUserQueueInputRawShape,
+        authenticationRequired: true
+    },
+    handler: async (input: GetUserQueueInput) => {
+        try {
+            const result = await getUserQueue();
+            if (!result.queue) {
+                throw new Error(result.error || "Unknown get user queue error");
+            }
+            return {
+                content: [{ type: "text", text: JSON.stringify(result) } as const],
+                structuredContent: result,
+            };
+        } catch (error) {
+            const errorMessage = error instanceof Error ? error.message : "Unknown error occurred";
+            throw new Error(`Failed to get user queue: ${errorMessage}`);
+        }
+    }
+};
+
+const AddItemToPlaybackQueueInputRawShape = {
+    uri: z.string().min(1, "URI cannot be empty"),
+    device_id: z.string().optional()
+};
+const AddItemToPlaybackQueueInputSchema = z.object(AddItemToPlaybackQueueInputRawShape);
+type AddItemToPlaybackQueueInput = z.infer<typeof AddItemToPlaybackQueueInputSchema>;
+
+const addItemToPlaybackQueueTool = {
+    name: "add-item-to-playback-queue",
+    config: {
+        title: "Add Item to Playback Queue",
+        description: "Add an item to be played next in the user's current playback queue. Premium only.",
+        inputSchema: AddItemToPlaybackQueueInputRawShape,
+        authenticationRequired: true
+    },
+    handler: async (input: AddItemToPlaybackQueueInput) => {
+        try {
+            const result = await addItemToPlaybackQueue(input.uri, input.device_id);
+            if (!result.success) {
+                throw new Error(result.error || "Unknown add item to playback queue error");
+            }
+            const response = {
+                message: `Successfully added ${input.uri} to the playback queue`,
+                action: "add_to_queue"
+            };
+            return {
+                content: [{ type: "text", text: JSON.stringify(response) } as const],
+                structuredContent: response,
+            };
+        } catch (error) {
+            const errorMessage = error instanceof Error ? error.message : "Unknown error occurred";
+            throw new Error(`Failed to add item to playback queue: ${errorMessage}`);
+        }
+    }
+};
+
 export const playerTools = [
     getPlaybackStateTool,
     transferPlaybackTool,
     getAvailableDevicesTool,
     getCurrentlyPlayingTrackTool,
     startResumePlaybackTool,
-    pausePlaybackTool
+    pausePlaybackTool,
+    skipToNextTool,
+    skipToPreviousTool,
+    seekToPositionTool,
+    setRepeatModeTool,
+    setPlaybackVolumeTool,
+    togglePlaybackShuffleTool,
+    getRecentlyPlayedTracksTool,
+    getUserQueueTool,
+    addItemToPlaybackQueueTool
 ];
