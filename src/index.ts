@@ -12,6 +12,10 @@ envConfig();
 
 const authService = AuthService.getInstance();
 
+app.get("/ping", async (req: Request, res: Response) => {
+    res.send("pong");
+})
+
 app.get("/callback", async (req: Request, res: Response) => {
     const code = req.query.code as string;
     const state = req.query.state as string;
