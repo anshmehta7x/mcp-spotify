@@ -36,8 +36,22 @@ import {
     unfollowArtistsOrUsers,
     checkIfUserFollows,
     checkIfCurrentUserFollowsPlaylist,
+    // New imports
+    getRecommendations,
+    getNewReleases,
+    getFeaturedPlaylists,
+    createPlaylist,
+    getArtistTopTracks,
+    getArtistRelatedArtists,
+    getArtistAlbums,
+    getAlbumTracks,
+    removePlaylistItems,
 } from "./requests.js";
 import { SpotifyUserProfile } from "../types/user.js";
+
+interface RequestContext {
+    sessionId: string;
+}
 
 const GetPlaybackStateInputRawShape = {
     market: z.string().optional(),
@@ -54,8 +68,8 @@ const getPlaybackStateTool = {
         inputSchema: GetPlaybackStateInputRawShape,
         authenticationRequired: true
     },
-    handler: async (input: GetPlaybackStateInput) => {
-        const playbackState = await getPlaybackState(input.market, input.additional_types);
+    handler: async (request: RequestContext, input: GetPlaybackStateInput) => {
+        const playbackState = await getPlaybackState(request.sessionId, input.market, input.additional_types);
         return {
             content: [{ type: "text", text: JSON.stringify(playbackState) } as const],
             structuredContent: playbackState,
@@ -78,9 +92,9 @@ const transferPlaybackTool = {
         inputSchema: TransferPlaybackInputRawShape,
         authenticationRequired: true
     },
-    handler: async (input: TransferPlaybackInput) => {
+    handler: async (request: RequestContext, input: TransferPlaybackInput) => {
         const deviceIds = input.device_ids.split(',').map(id => id.trim());
-        await transferPlayback(deviceIds, input.play);
+        await transferPlayback(request.sessionId, deviceIds, input.play);
         const response = {
             message: `Successfully transferred playback to device: ${input.device_ids}`,
             action: "transferred"
@@ -104,8 +118,8 @@ const getAvailableDevicesTool = {
         inputSchema: GetAvailableDevicesInputRawShape,
         authenticationRequired: true
     },
-    handler: async (input: GetAvailableDevicesInput) => {
-        const devices = await getAvailableDevices();
+    handler: async (request: RequestContext, input: GetAvailableDevicesInput) => {
+        const devices = await getAvailableDevices(request.sessionId);
         return {
             content: [{ type: "text", text: JSON.stringify(devices) } as const],
             structuredContent: devices,
@@ -128,8 +142,8 @@ const getCurrentlyPlayingTrackTool = {
         inputSchema: GetCurrentlyPlayingTrackInputRawShape,
         authenticationRequired: true
     },
-    handler: async (input: GetCurrentlyPlayingTrackInput) => {
-        const currentTrack = await getCurrentlyPlayingTrack(input.market, input.additional_types);
+    handler: async (request: RequestContext, input: GetCurrentlyPlayingTrackInput) => {
+        const currentTrack = await getCurrentlyPlayingTrack(request.sessionId, input.market, input.additional_types);
         return {
             content: [{ type: "text", text: JSON.stringify(currentTrack) } as const],
             structuredContent: currentTrack,
@@ -156,7 +170,7 @@ const startResumePlaybackTool = {
         inputSchema: StartResumePlaybackInputRawShape,
         authenticationRequired: true
     },
-    handler: async (input: StartResumePlaybackInput) => {
+    handler: async (request: RequestContext, input: StartResumePlaybackInput) => {
         const urisArray = input.uris ? input.uris.split(',').map(uri => uri.trim()) : undefined;
         const offset = input.offset_position !== undefined || input.offset_uri
             ? {
@@ -166,6 +180,7 @@ const startResumePlaybackTool = {
             : undefined;
 
         await startResumePlayback(
+            request.sessionId,
             input.device_id,
             input.context_uri,
             urisArray,
@@ -198,8 +213,8 @@ const pausePlaybackTool = {
         inputSchema: PausePlaybackInputRawShape,
         authenticationRequired: true
     },
-    handler: async (input: PausePlaybackInput) => {
-        await pausePlayback(input.device_id);
+    handler: async (request: RequestContext, input: PausePlaybackInput) => {
+        await pausePlayback(request.sessionId, input.device_id);
         const response = {
             message: "Successfully paused playback",
             action: "pause"
@@ -221,12 +236,12 @@ const skipToNextTool = {
     name: "skip-to-next",
     config: {
         title: "Skip To Next",
-        description: "Skips to the next track in the user’s queue. Premium only.",
+        description: "Skips to the next track in the user's queue. Premium only.",
         inputSchema: SkipToNextInputRawShape,
         authenticationRequired: true
     },
-    handler: async (input: SkipToNextInput) => {
-        await skipToNext(input.device_id);
+    handler: async (request: RequestContext, input: SkipToNextInput) => {
+        await skipToNext(request.sessionId, input.device_id);
         const response = {
             message: "Successfully skipped to the next track",
             action: "next"
@@ -248,12 +263,12 @@ const skipToPreviousTool = {
     name: "skip-to-previous",
     config: {
         title: "Skip To Previous",
-        description: "Skips to the previous track in the user’s queue. Premium only.",
+        description: "Skips to the previous track in the user's queue. Premium only.",
         inputSchema: SkipToPreviousInputRawShape,
         authenticationRequired: true
     },
-    handler: async (input: SkipToPreviousInput) => {
-        await skipToPrevious(input.device_id);
+    handler: async (request: RequestContext, input: SkipToPreviousInput) => {
+        await skipToPrevious(request.sessionId, input.device_id);
         const response = {
             message: "Successfully skipped to the previous track",
             action: "previous"
@@ -276,12 +291,12 @@ const seekToPositionTool = {
     name: "seek-to-position",
     config: {
         title: "Seek To Position",
-        description: "Seeks to the given position in the user’s currently playing track. Premium only.",
+        description: "Seeks to the given position in the user's currently playing track. Premium only.",
         inputSchema: SeekToPositionInputRawShape,
         authenticationRequired: true
     },
-    handler: async (input: SeekToPositionInput) => {
-        await seekToPosition(input.position_ms, input.device_id);
+    handler: async (request: RequestContext, input: SeekToPositionInput) => {
+        await seekToPosition(request.sessionId, input.position_ms, input.device_id);
         const response = {
             message: `Successfully sought to position ${input.position_ms}ms`,
             action: "seek"
@@ -315,8 +330,8 @@ const setRepeatModeTool = {
         inputSchema: SetRepeatModeInputRawShape,
         authenticationRequired: true
     },
-    handler: async (input: SetRepeatModeInput) => {
-        await setRepeatMode(input.state, input.device_id);
+    handler: async (request: RequestContext, input: SetRepeatModeInput) => {
+        await setRepeatMode(request.sessionId, input.state, input.device_id);
         const response = {
             message: `Successfully set repeat mode to ${input.state}`,
             action: "set_repeat_mode"
@@ -339,12 +354,12 @@ const setPlaybackVolumeTool = {
     name: "set-playback-volume",
     config: {
         title: "Set Playback Volume",
-        description: "Set the volume for the user’s current playback device. Premium only.",
+        description: "Set the volume for the user's current playback device. Premium only.",
         inputSchema: SetPlaybackVolumeInputRawShape,
         authenticationRequired: true
     },
-    handler: async (input: SetPlaybackVolumeInput) => {
-        await setPlaybackVolume(input.volume_percent, input.device_id);
+    handler: async (request: RequestContext, input: SetPlaybackVolumeInput) => {
+        await setPlaybackVolume(request.sessionId, input.volume_percent, input.device_id);
         const response = {
             message: `Successfully set playback volume to ${input.volume_percent}%`,
             action: "set_volume"
@@ -367,12 +382,12 @@ const togglePlaybackShuffleTool = {
     name: "toggle-playback-shuffle",
     config: {
         title: "Toggle Playback Shuffle",
-        description: "Toggle shuffle on or off for user’s playback. Premium only.",
+        description: "Toggle shuffle on or off for user's playback. Premium only.",
         inputSchema: TogglePlaybackShuffleInputRawShape,
         authenticationRequired: true
     },
-    handler: async (input: TogglePlaybackShuffleInput) => {
-        await togglePlaybackShuffle(input.state, input.device_id);
+    handler: async (request: RequestContext, input: TogglePlaybackShuffleInput) => {
+        await togglePlaybackShuffle(request.sessionId, input.state, input.device_id);
         const response = {
             message: `Successfully set shuffle to ${input.state ? "on" : "off"}`,
             action: "toggle_shuffle"
@@ -400,8 +415,8 @@ const getRecentlyPlayedTracksTool = {
         inputSchema: GetRecentlyPlayedTracksInputRawShape,
         authenticationRequired: true
     },
-    handler: async (input: GetRecentlyPlayedTracksInput) => {
-        const result = await getRecentlyPlayedTracks(input.limit, input.after, input.before);
+    handler: async (request: RequestContext, input: GetRecentlyPlayedTracksInput) => {
+        const result = await getRecentlyPlayedTracks(request.sessionId, input.limit, input.after, input.before);
         return {
             content: [{ type: "text", text: JSON.stringify(result) } as const],
             structuredContent: result,
@@ -421,8 +436,8 @@ const getUserQueueTool = {
         inputSchema: GetUserQueueInputRawShape,
         authenticationRequired: true
     },
-    handler: async (input: GetUserQueueInput) => {
-        const result = await getUserQueue();
+    handler: async (request: RequestContext, input: GetUserQueueInput) => {
+        const result = await getUserQueue(request.sessionId);
         return {
             content: [{ type: "text", text: JSON.stringify(result) } as const],
             structuredContent: result,
@@ -445,8 +460,8 @@ const addItemToPlaybackQueueTool = {
         inputSchema: AddItemToPlaybackQueueInputRawShape,
         authenticationRequired: true
     },
-    handler: async (input: AddItemToPlaybackQueueInput) => {
-        await addItemToPlaybackQueue(input.uri, input.device_id);
+    handler: async (request: RequestContext, input: AddItemToPlaybackQueueInput) => {
+        await addItemToPlaybackQueue(request.sessionId, input.uri, input.device_id);
         const response = {
             message: `Successfully added ${input.uri} to the playback queue`,
             action: "add_to_queue"
@@ -475,8 +490,9 @@ const getPlaylistTool = {
         inputSchema: GetPlaylistInputRawShape,
         authenticationRequired: true
     },
-    handler: async (input: GetPlaylistInput) => {
+    handler: async (request: RequestContext, input: GetPlaylistInput) => {
         const playlist = await getPlaylist(
+            request.sessionId,
             input.playlist_id,
             input.market,
             input.fields,
@@ -507,8 +523,9 @@ const changePlaylistDetailsTool = {
         inputSchema: ChangePlaylistDetailsInputRawShape,
         authenticationRequired: true
     },
-    handler: async (input: ChangePlaylistDetailsInput) => {
+    handler: async (request: RequestContext, input: ChangePlaylistDetailsInput) => {
         await changePlaylistDetails(
+            request.sessionId,
             input.playlist_id,
             input.name,
             input.description,
@@ -545,8 +562,9 @@ const getPlaylistItemsTool = {
         inputSchema: GetPlaylistItemsInputRawShape,
         authenticationRequired: true
     },
-    handler: async (input: GetPlaylistItemsInput) => {
+    handler: async (request: RequestContext, input: GetPlaylistItemsInput) => {
         const items = await getPlaylistItems(
+            request.sessionId,
             input.playlist_id,
             input.market,
             input.fields,
@@ -580,9 +598,10 @@ const updatePlaylistItemsTool = {
         inputSchema: UpdatePlaylistItemsInputRawShape,
         authenticationRequired: true
     },
-    handler: async (input: UpdatePlaylistItemsInput) => {
+    handler: async (request: RequestContext, input: UpdatePlaylistItemsInput) => {
         const urisArray = input.uris ? input.uris.split(',').map(uri => uri.trim()) : undefined;
         const result = await updatePlaylistItems(
+            request.sessionId,
             input.playlist_id,
             urisArray,
             input.range_start,
@@ -618,12 +637,13 @@ const addItemsToPlaylistTool = {
         inputSchema: AddItemsToPlaylistInputRawShape,
         authenticationRequired: true
     },
-    handler: async (input: AddItemsToPlaylistInput) => {
+    handler: async (request: RequestContext, input: AddItemsToPlaylistInput) => {
         const urisArray = input.uris.split(',').map(uri => uri.trim());
         if (urisArray.length > 100) {
             throw new Error("Maximum 100 items can be added in one request");
         }
         const result = await addItemsToPlaylist(
+            request.sessionId,
             input.playlist_id,
             urisArray,
             input.position
@@ -659,8 +679,9 @@ const searchItemsTool = {
         inputSchema: SearchItemsInputRawShape,
         authenticationRequired: true
     },
-    handler: async (input: SearchItemsInput) => {
+    handler: async (request: RequestContext, input: SearchItemsInput) => {
         const result = await searchItems(
+            request.sessionId,
             input.q,
             input.type,
             input.market,
@@ -690,8 +711,8 @@ const getTrackTool = {
         inputSchema: GetTrackInputRawShape,
         authenticationRequired: true
     },
-    handler: async (input: GetTrackInput) => {
-        const track = await getTrack(input.id, input.market);
+    handler: async (request: RequestContext, input: GetTrackInput) => {
+        const track = await getTrack(request.sessionId, input.id, input.market);
         return {
             content: [{ type: "text", text: JSON.stringify(track) } as const],
             structuredContent: track,
@@ -714,8 +735,8 @@ const getSeveralTracksTool = {
         inputSchema: GetSeveralTracksInputRawShape,
         authenticationRequired: true
     },
-    handler: async (input: GetSeveralTracksInput) => {
-        const tracks = await getSeveralTracks(input.ids, input.market);
+    handler: async (request: RequestContext, input: GetSeveralTracksInput) => {
+        const tracks = await getSeveralTracks(request.sessionId, input.ids, input.market);
         return {
             content: [{ type: "text", text: JSON.stringify(tracks) } as const],
             structuredContent: tracks,
@@ -739,8 +760,8 @@ const getSavedTracksTool = {
         inputSchema: GetSavedTracksInputRawShape,
         authenticationRequired: true
     },
-    handler: async (input: GetSavedTracksInput) => {
-        const savedTracks = await getSavedTracks(input.market, input.limit, input.offset);
+    handler: async (request: RequestContext, input: GetSavedTracksInput) => {
+        const savedTracks = await getSavedTracks(request.sessionId, input.market, input.limit, input.offset);
         return {
             content: [{ type: "text", text: JSON.stringify(savedTracks) } as const],
             structuredContent: savedTracks,
@@ -762,8 +783,8 @@ const saveTracksTool = {
         inputSchema: SaveTracksInputRawShape,
         authenticationRequired: true
     },
-    handler: async (input: SaveTracksInput) => {
-        await saveTracks(input.ids);
+    handler: async (request: RequestContext, input: SaveTracksInput) => {
+        await saveTracks(request.sessionId, input.ids);
         const response = {
             message: `Successfully saved tracks: ${input.ids}`,
             action: "saved"
@@ -789,8 +810,8 @@ const removeSavedTracksTool = {
         inputSchema: RemoveSavedTracksInputRawShape,
         authenticationRequired: true
     },
-    handler: async (input: RemoveSavedTracksInput) => {
-        await removeSavedTracks(input.ids);
+    handler: async (request: RequestContext, input: RemoveSavedTracksInput) => {
+        await removeSavedTracks(request.sessionId, input.ids);
         const response = {
             message: `Successfully removed tracks: ${input.ids}`,
             action: "removed"
@@ -816,8 +837,8 @@ const checkSavedTracksTool = {
         inputSchema: CheckSavedTracksInputRawShape,
         authenticationRequired: true
     },
-    handler: async (input: CheckSavedTracksInput) => {
-        const statuses = await checkSavedTracks(input.ids);
+    handler: async (request: RequestContext, input: CheckSavedTracksInput) => {
+        const statuses = await checkSavedTracks(request.sessionId, input.ids);
         const response = {
             ids: input.ids.split(',').map(id => id.trim()),
             statuses: statuses
@@ -847,9 +868,9 @@ const followOrUnfollowPlaylistTool = {
         authenticationRequired: true
     },
 
-    handler: async (input: FollowOrUnfollowPlaylistInput) => {
+    handler: async (request: RequestContext, input: FollowOrUnfollowPlaylistInput) => {
         const follow = input.follow ?? true; // default = follow
-        await followOrUnfollowPlaylist(input.playlistId, follow);
+        await followOrUnfollowPlaylist(request.sessionId, input.playlistId, follow);
 
         const response = {
             message: follow
@@ -883,8 +904,8 @@ const getUserProfileTool = {
         inputSchema: UserProfileInputRawShape,
         authenticationRequired: true
     },
-    handler: async (input: UserProfileInput) => {
-        const profile = await getUserProfile(input.userId);
+    handler: async (request: RequestContext, input: UserProfileInput) => {
+        const profile = await getUserProfile(request.sessionId, input.userId);
         return {
             content: [{ type: "text", text: JSON.stringify(profile) } as const],
             structuredContent: profile,
@@ -914,8 +935,9 @@ const getCurrentUserTopItemsTool = {
         inputSchema: TopItemsInputRawShape,
         authenticationRequired: true
     },
-    handler: async (input: TopItemsInput) => {
+    handler: async (request: RequestContext, input: TopItemsInput) => {
         const result = await getCurrentUserTopItems(
+            request.sessionId,
             input.type,
             input.time_range,
             input.limit,
@@ -938,8 +960,8 @@ const getCurrentUserProfileTool = {
         inputSchema: {},
         authenticationRequired: true
     },
-    handler: async () => {
-        const profile: SpotifyUserProfile = await getCurrentUserProfile() as SpotifyUserProfile;
+    handler: async (request: RequestContext) => {
+        const profile: SpotifyUserProfile = await getCurrentUserProfile(request.sessionId) as SpotifyUserProfile;
         return {
             content: [{ type: "text", text: JSON.stringify(profile) } as const],
             structuredContent: profile,
@@ -965,8 +987,9 @@ const getFollowedArtistsTool = {
         inputSchema: GetFollowedArtistsInputRawShape,
         authenticationRequired: true
     },
-    handler: async (input: GetFollowedArtistsInput) => {
+    handler: async (request: RequestContext, input: GetFollowedArtistsInput) => {
         const result = await getFollowedArtists(
+            request.sessionId,
             input.type,
             input.after,
             input.limit
@@ -996,8 +1019,8 @@ const followArtistsOrUsersTool = {
         inputSchema: FollowArtistsOrUsersInputRawShape,
         authenticationRequired: true
     },
-    handler: async (input: FollowArtistsOrUsersInput) => {
-        await followArtistsOrUsers(input.type, input.ids);
+    handler: async (request: RequestContext, input: FollowArtistsOrUsersInput) => {
+        await followArtistsOrUsers(request.sessionId, input.type, input.ids);
         const response = {
             message: `Successfully followed ${input.type}(s)`,
             type: input.type,
@@ -1019,8 +1042,8 @@ const unfollowArtistsOrUsersTool = {
         inputSchema: FollowArtistsOrUsersInputRawShape,
         authenticationRequired: true
     },
-    handler: async (input: FollowArtistsOrUsersInput) => {
-        await unfollowArtistsOrUsers(input.type, input.ids);
+    handler: async (request: RequestContext, input: FollowArtistsOrUsersInput) => {
+        await unfollowArtistsOrUsers(request.sessionId, input.type, input.ids);
         const response = {
             message: `Successfully unfollowed ${input.type}(s)`,
             type: input.type,
@@ -1051,8 +1074,8 @@ const checkIfUserFollowsTool = {
         inputSchema: CheckIfUserFollowsInputRawShape,
         authenticationRequired: true
     },
-    handler: async (input: CheckIfUserFollowsInput) => {
-        const result = await checkIfUserFollows(input.type, input.ids);
+    handler: async (request: RequestContext, input: CheckIfUserFollowsInput) => {
+        const result = await checkIfUserFollows(request.sessionId, input.type, input.ids);
         const response = {
             type: input.type,
             ids: input.ids,
@@ -1087,8 +1110,8 @@ const checkIfCurrentUserFollowsPlaylistTool = {
         inputSchema: CheckIfCurrentUserFollowsPlaylistInputRawShape,
         authenticationRequired: true
     },
-    handler: async (input: CheckIfCurrentUserFollowsPlaylistInput) => {
-        const result = await checkIfCurrentUserFollowsPlaylist(input.playlistId, input.ids);
+    handler: async (request: RequestContext, input: CheckIfCurrentUserFollowsPlaylistInput) => {
+        const result = await checkIfCurrentUserFollowsPlaylist(request.sessionId, input.playlistId, input.ids);
         const response = {
             playlistId: input.playlistId,
             isFollowing: result
@@ -1096,6 +1119,286 @@ const checkIfCurrentUserFollowsPlaylistTool = {
         return {
             content: [{ type: "text", text: JSON.stringify(response) } as const],
             structuredContent: response
+        };
+    }
+};
+
+// ============ NEW FEATURE TOOLS ============
+
+// Get Recommendations Tool
+const GetRecommendationsInputRawShape = {
+    seed_artists: z.string().optional(),
+    seed_tracks: z.string().optional(),
+    seed_genres: z.string().optional(),
+    target_energy: z.number().min(0).max(1).optional(),
+    target_danceability: z.number().min(0).max(1).optional(),
+    target_valence: z.number().min(0).max(1).optional(),
+    limit: z.number().min(1).max(100).optional()
+};
+
+const GetRecommendationsInputSchema = z.object(GetRecommendationsInputRawShape);
+type GetRecommendationsInput = z.infer<typeof GetRecommendationsInputSchema>;
+
+const getRecommendationsTool = {
+    name: "get-recommendations",
+    config: {
+        title: "Get Recommendations",
+        description: "Get personalized song recommendations based on seed artists, tracks, or genres. You can also specify target energy, danceability, and valence (mood) levels. Maximum 5 seeds total.",
+        inputSchema: GetRecommendationsInputRawShape,
+        authenticationRequired: true
+    },
+    handler: async (request: RequestContext, input: GetRecommendationsInput) => {
+        const result = await getRecommendations(
+            request.sessionId,
+            input.seed_artists,
+            input.seed_tracks,
+            input.seed_genres,
+            input.target_energy,
+            input.target_danceability,
+            input.target_valence,
+            input.limit
+        );
+        return {
+            content: [{ type: "text", text: JSON.stringify(result) } as const],
+            structuredContent: result,
+        };
+    }
+};
+
+// Get New Releases Tool
+const GetNewReleasesInputRawShape = {
+    limit: z.number().min(1).max(50).optional(),
+    offset: z.number().min(0).optional()
+};
+
+const GetNewReleasesInputSchema = z.object(GetNewReleasesInputRawShape);
+type GetNewReleasesInput = z.infer<typeof GetNewReleasesInputSchema>;
+
+const getNewReleasesTool = {
+    name: "get-new-releases",
+    config: {
+        title: "Get New Releases",
+        description: "Get a list of new album releases featured by Spotify. Great for discovering the latest music.",
+        inputSchema: GetNewReleasesInputRawShape,
+        authenticationRequired: true
+    },
+    handler: async (request: RequestContext, input: GetNewReleasesInput) => {
+        const result = await getNewReleases(request.sessionId, input.limit, input.offset);
+        return {
+            content: [{ type: "text", text: JSON.stringify(result) } as const],
+            structuredContent: result,
+        };
+    }
+};
+
+// Get Featured Playlists Tool
+const GetFeaturedPlaylistsInputRawShape = {
+    limit: z.number().min(1).max(50).optional(),
+    offset: z.number().min(0).optional()
+};
+
+const GetFeaturedPlaylistsInputSchema = z.object(GetFeaturedPlaylistsInputRawShape);
+type GetFeaturedPlaylistsInput = z.infer<typeof GetFeaturedPlaylistsInputSchema>;
+
+const getFeaturedPlaylistsTool = {
+    name: "get-featured-playlists",
+    config: {
+        title: "Get Featured Playlists",
+        description: "Get a list of Spotify's featured playlists with editorial descriptions.",
+        inputSchema: GetFeaturedPlaylistsInputRawShape,
+        authenticationRequired: true
+    },
+    handler: async (request: RequestContext, input: GetFeaturedPlaylistsInput) => {
+        const result = await getFeaturedPlaylists(request.sessionId, input.limit, input.offset);
+        return {
+            content: [{ type: "text", text: JSON.stringify(result) } as const],
+            structuredContent: result,
+        };
+    }
+};
+
+// Create Playlist Tool
+const CreatePlaylistInputRawShape = {
+    name: z.string().min(1, "Playlist name cannot be empty").max(100, "Playlist name is too long"),
+    description: z.string().optional(),
+    public: z.boolean().optional()
+};
+
+const CreatePlaylistInputSchema = z.object(CreatePlaylistInputRawShape);
+type CreatePlaylistInput = z.infer<typeof CreatePlaylistInputSchema>;
+
+const createPlaylistTool = {
+    name: "create-playlist",
+    config: {
+        title: "Create Playlist",
+        description: "Create a new playlist for the authenticated user. You can set it as public or private.",
+        inputSchema: CreatePlaylistInputRawShape,
+        authenticationRequired: true
+    },
+    handler: async (request: RequestContext, input: CreatePlaylistInput) => {
+        const playlist = await createPlaylist(
+            request.sessionId,
+            input.name,
+            input.description,
+            input.public
+        );
+        const response = {
+            message: `Successfully created playlist: ${input.name}`,
+            playlist,
+            action: "created"
+        };
+        return {
+            content: [{ type: "text", text: JSON.stringify(response) } as const],
+            structuredContent: response,
+        };
+    }
+};
+
+// Get Artist's Top Tracks Tool
+const GetArtistTopTracksInputRawShape = {
+    artist_id: z.string().min(1, "Artist ID cannot be empty"),
+    market: z.string().optional()
+};
+
+const GetArtistTopTracksInputSchema = z.object(GetArtistTopTracksInputRawShape);
+type GetArtistTopTracksInput = z.infer<typeof GetArtistTopTracksInputSchema>;
+
+const getArtistTopTracksTool = {
+    name: "get-artist-top-tracks",
+    config: {
+        title: "Get Artist's Top Tracks",
+        description: "Get an artist's top tracks. Great for discovering an artist's most popular songs.",
+        inputSchema: GetArtistTopTracksInputRawShape,
+        authenticationRequired: true
+    },
+    handler: async (request: RequestContext, input: GetArtistTopTracksInput) => {
+        const result = await getArtistTopTracks(request.sessionId, input.artist_id, input.market);
+        return {
+            content: [{ type: "text", text: JSON.stringify(result) } as const],
+            structuredContent: result,
+        };
+    }
+};
+
+// Get Related Artists Tool
+const GetRelatedArtistsInputRawShape = {
+    artist_id: z.string().min(1, "Artist ID cannot be empty")
+};
+
+const GetRelatedArtistsInputSchema = z.object(GetRelatedArtistsInputRawShape);
+type GetRelatedArtistsInput = z.infer<typeof GetRelatedArtistsInputSchema>;
+
+const getRelatedArtistsTool = {
+    name: "get-related-artists",
+    config: {
+        title: "Get Related Artists",
+        description: "Get artists related to a specified artist. Great for discovering similar artists.",
+        inputSchema: GetRelatedArtistsInputRawShape,
+        authenticationRequired: true
+    },
+    handler: async (request: RequestContext, input: GetRelatedArtistsInput) => {
+        const result = await getArtistRelatedArtists(request.sessionId, input.artist_id);
+        return {
+            content: [{ type: "text", text: JSON.stringify(result) } as const],
+            structuredContent: result,
+        };
+    }
+};
+
+// Get Artist Albums Tool
+const GetArtistAlbumsInputRawShape = {
+    artist_id: z.string().min(1, "Artist ID cannot be empty"),
+    include_groups: z.string().optional(),
+    limit: z.number().min(1).max(50).optional(),
+    offset: z.number().min(0).optional()
+};
+
+const GetArtistAlbumsInputSchema = z.object(GetArtistAlbumsInputRawShape);
+type GetArtistAlbumsInput = z.infer<typeof GetArtistAlbumsInputSchema>;
+
+const getArtistAlbumsTool = {
+    name: "get-artist-albums",
+    config: {
+        title: "Get Artist Albums",
+        description: "Get albums by a specific artist. Filter by type using include_groups (album, single, compilation, appears_on).",
+        inputSchema: GetArtistAlbumsInputRawShape,
+        authenticationRequired: true
+    },
+    handler: async (request: RequestContext, input: GetArtistAlbumsInput) => {
+        const result = await getArtistAlbums(
+            request.sessionId,
+            input.artist_id,
+            input.include_groups,
+            input.limit,
+            input.offset
+        );
+        return {
+            content: [{ type: "text", text: JSON.stringify(result) } as const],
+            structuredContent: result,
+        };
+    }
+};
+
+// Get Album Tracks Tool
+const GetAlbumTracksInputRawShape = {
+    album_id: z.string().min(1, "Album ID cannot be empty"),
+    market: z.string().optional()
+};
+
+const GetAlbumTracksInputSchema = z.object(GetAlbumTracksInputRawShape);
+type GetAlbumTracksInput = z.infer<typeof GetAlbumTracksInputSchema>;
+
+const getAlbumTracksTool = {
+    name: "get-album-tracks",
+    config: {
+        title: "Get Album Tracks",
+        description: "Get tracks from an album by its ID.",
+        inputSchema: GetAlbumTracksInputRawShape,
+        authenticationRequired: true
+    },
+    handler: async (request: RequestContext, input: GetAlbumTracksInput) => {
+        const result = await getAlbumTracks(request.sessionId, input.album_id, input.market);
+        return {
+            content: [{ type: "text", text: JSON.stringify(result) } as const],
+            structuredContent: result,
+        };
+    }
+};
+
+// Remove Playlist Items Tool
+const RemovePlaylistItemsInputRawShape = {
+    playlist_id: z.string().min(1, "Playlist ID cannot be empty"),
+    uris: z.string().min(1, "URIs cannot be empty"),
+    snapshot_id: z.string().optional()
+};
+
+const RemovePlaylistItemsInputSchema = z.object(RemovePlaylistItemsInputRawShape);
+type RemovePlaylistItemsInput = z.infer<typeof RemovePlaylistItemsInputSchema>;
+
+const removePlaylistItemsTool = {
+    name: "remove-playlist-items",
+    config: {
+        title: "Remove Items from Playlist",
+        description: "Remove specific tracks from a playlist by their URIs. Provide the playlist ID and comma-separated URIs.",
+        inputSchema: RemovePlaylistItemsInputRawShape,
+        authenticationRequired: true
+    },
+    handler: async (request: RequestContext, input: RemovePlaylistItemsInput) => {
+        const urisArray = input.uris.split(',').map(uri => uri.trim());
+        const result = await removePlaylistItems(
+            request.sessionId,
+            input.playlist_id,
+            urisArray,
+            input.snapshot_id
+        );
+        const response = {
+            message: `Successfully removed ${urisArray.length} item(s) from playlist`,
+            action: "removed_items",
+            snapshot_id: result.snapshot_id
+        };
+        return {
+            content: [{ type: "text", text: JSON.stringify(response) } as const],
+            structuredContent: response,
         };
     }
 };
@@ -1136,5 +1439,15 @@ export const allTools = [
     followArtistsOrUsersTool,
     unfollowArtistsOrUsersTool,
     checkIfUserFollowsTool,
-    checkIfCurrentUserFollowsPlaylistTool
+    checkIfCurrentUserFollowsPlaylistTool,
+    // New features
+    getRecommendationsTool,
+    getNewReleasesTool,
+    getFeaturedPlaylistsTool,
+    createPlaylistTool,
+    getArtistTopTracksTool,
+    getRelatedArtistsTool,
+    getArtistAlbumsTool,
+    getAlbumTracksTool,
+    removePlaylistItemsTool,
 ];

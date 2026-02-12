@@ -14,16 +14,19 @@ import {
     slimShow,
 } from "./slims.js";
 
-const authservice = AuthService.getInstance();
+const authService = AuthService.getInstance();
 const SPOTIFY_API_BASE = "https://api.spotify.com/v1";
 
 export async function makeRequest<T>(
+    sessionId: string,
     method: Method,
     endpoint: string,
     config?: AxiosRequestConfig
 ): Promise<T> {
-    if (!authservice.isAuthenticated()) {
-        throw new Error("User is not authenticated");
+    const accessToken = await authService.getAccessToken(sessionId);
+    
+    if (!accessToken) {
+        throw new Error("User is not authenticated or token has expired");
     }
 
     try {
@@ -31,7 +34,7 @@ export async function makeRequest<T>(
             method,
             url: `${SPOTIFY_API_BASE}/${endpoint}`,
             headers: {
-                Authorization: `Bearer ${authservice.getAccessToken()}`,
+                Authorization: `Bearer ${accessToken}`,
                 "Content-Type": "application/json",
             },
             ...config,
@@ -45,8 +48,8 @@ export async function makeRequest<T>(
     }
 }
 
-export async function getPlaybackState(market?: string, additionalTypes?: string) {
-    const data = await makeRequest("GET", "me/player", {
+export async function getPlaybackState(sessionId: string, market?: string, additionalTypes?: string) {
+    const data = await makeRequest<any>(sessionId, "GET", "me/player", {
         params: {
             market,
             additional_types: additionalTypes,
@@ -55,8 +58,8 @@ export async function getPlaybackState(market?: string, additionalTypes?: string
     return slimPlaybackState(data);
 }
 
-export async function transferPlayback(deviceIds: string[], play?: boolean) {
-    await makeRequest("PUT", "me/player", {
+export async function transferPlayback(sessionId: string, deviceIds: string[], play?: boolean) {
+    await makeRequest(sessionId, "PUT", "me/player", {
         data: {
             device_ids: deviceIds,
             play: play,
@@ -65,15 +68,15 @@ export async function transferPlayback(deviceIds: string[], play?: boolean) {
     return { success: true };
 }
 
-export async function getAvailableDevices() {
-    const data = await makeRequest<any>("GET", "me/player/devices");
+export async function getAvailableDevices(sessionId: string) {
+    const data = await makeRequest<any>(sessionId, "GET", "me/player/devices");
     return {
         devices: data.devices.map(slimDevice),
     };
 }
 
-export async function getCurrentlyPlayingTrack(market?: string, additionalTypes?: string) {
-    const data = await makeRequest("GET", "me/player/currently-playing", {
+export async function getCurrentlyPlayingTrack(sessionId: string, market?: string, additionalTypes?: string) {
+    const data = await makeRequest<any>(sessionId, "GET", "me/player/currently-playing", {
         params: {
             market,
             additional_types: additionalTypes,
@@ -83,6 +86,7 @@ export async function getCurrentlyPlayingTrack(market?: string, additionalTypes?
 }
 
 export async function startResumePlayback(
+    sessionId: string,
     deviceId?: string,
     contextUri?: string,
     uris?: string[],
@@ -95,36 +99,36 @@ export async function startResumePlayback(
     if (offset) body.offset = offset;
     if (positionMs !== undefined) body.position_ms = positionMs;
 
-    await makeRequest("PUT", "me/player/play", {
+    await makeRequest(sessionId, "PUT", "me/player/play", {
         data: body,
         params: deviceId ? { device_id: deviceId } : undefined,
     });
     return { success: true };
 }
 
-export async function pausePlayback(deviceId?: string) {
-    await makeRequest("PUT", "me/player/pause", {
+export async function pausePlayback(sessionId: string, deviceId?: string) {
+    await makeRequest(sessionId, "PUT", "me/player/pause", {
         params: deviceId ? { device_id: deviceId } : undefined,
     });
     return { success: true };
 }
 
-export async function skipToNext(deviceId?: string) {
-    await makeRequest("POST", "me/player/next", {
+export async function skipToNext(sessionId: string, deviceId?: string) {
+    await makeRequest(sessionId, "POST", "me/player/next", {
         params: deviceId ? { device_id: deviceId } : undefined,
     });
     return { success: true };
 }
 
-export async function skipToPrevious(deviceId?: string) {
-    await makeRequest("POST", "me/player/previous", {
+export async function skipToPrevious(sessionId: string, deviceId?: string) {
+    await makeRequest(sessionId, "POST", "me/player/previous", {
         params: deviceId ? { device_id: deviceId } : undefined,
     });
     return { success: true };
 }
 
-export async function seekToPosition(positionMs: number, deviceId?: string) {
-    await makeRequest("PUT", "me/player/seek", {
+export async function seekToPosition(sessionId: string, positionMs: number, deviceId?: string) {
+    await makeRequest(sessionId, "PUT", "me/player/seek", {
         params: {
             position_ms: positionMs,
             ...(deviceId && { device_id: deviceId }),
@@ -133,8 +137,8 @@ export async function seekToPosition(positionMs: number, deviceId?: string) {
     return { success: true };
 }
 
-export async function setRepeatMode(state: "track" | "context" | "off", deviceId?: string) {
-    await makeRequest("PUT", "me/player/repeat", {
+export async function setRepeatMode(sessionId: string, state: "track" | "context" | "off", deviceId?: string) {
+    await makeRequest(sessionId, "PUT", "me/player/repeat", {
         params: {
             state: state,
             ...(deviceId && { device_id: deviceId }),
@@ -143,8 +147,8 @@ export async function setRepeatMode(state: "track" | "context" | "off", deviceId
     return { success: true };
 }
 
-export async function setPlaybackVolume(volumePercent: number, deviceId?: string) {
-    await makeRequest("PUT", "me/player/volume", {
+export async function setPlaybackVolume(sessionId: string, volumePercent: number, deviceId?: string) {
+    await makeRequest(sessionId, "PUT", "me/player/volume", {
         params: {
             volume_percent: volumePercent,
             ...(deviceId && { device_id: deviceId }),
@@ -153,8 +157,8 @@ export async function setPlaybackVolume(volumePercent: number, deviceId?: string
     return { success: true };
 }
 
-export async function togglePlaybackShuffle(state: boolean, deviceId?: string) {
-    await makeRequest("PUT", "me/player/shuffle", {
+export async function togglePlaybackShuffle(sessionId: string, state: boolean, deviceId?: string) {
+    await makeRequest(sessionId, "PUT", "me/player/shuffle", {
         params: {
             state: state,
             ...(deviceId && { device_id: deviceId }),
@@ -163,8 +167,8 @@ export async function togglePlaybackShuffle(state: boolean, deviceId?: string) {
     return { success: true };
 }
 
-export async function getRecentlyPlayedTracks(limit?: number, after?: number, before?: number) {
-    const data = await makeRequest<any>("GET", "me/player/recently-played", {
+export async function getRecentlyPlayedTracks(sessionId: string, limit?: number, after?: number, before?: number) {
+    const data = await makeRequest<any>(sessionId, "GET", "me/player/recently-played", {
         params: {
             limit,
             after,
@@ -180,16 +184,16 @@ export async function getRecentlyPlayedTracks(limit?: number, after?: number, be
     };
 }
 
-export async function getUserQueue() {
-    const data = await makeRequest<any>("GET", "me/player/queue");
+export async function getUserQueue(sessionId: string) {
+    const data = await makeRequest<any>(sessionId, "GET", "me/player/queue");
     return {
         currently_playing: slimTrack(data.currently_playing),
         queue: data.queue.map(slimTrack),
     };
 }
 
-export async function addItemToPlaybackQueue(uri: string, deviceId?: string) {
-    await makeRequest("POST", "me/player/queue", {
+export async function addItemToPlaybackQueue(sessionId: string, uri: string, deviceId?: string) {
+    await makeRequest(sessionId, "POST", "me/player/queue", {
         params: {
             uri: uri,
             ...(deviceId && { device_id: deviceId }),
@@ -198,13 +202,8 @@ export async function addItemToPlaybackQueue(uri: string, deviceId?: string) {
     return { success: true };
 }
 
-export async function getPlaylist(
-    playlistId: string,
-    market?: string,
-    fields?: string,
-    additionalTypes?: string
-) {
-    const data = await makeRequest("GET", `playlists/${playlistId}`, {
+export async function getPlaylist(sessionId: string, playlistId: string, market?: string, fields?: string, additionalTypes?: string) {
+    const data = await makeRequest<any>(sessionId, "GET", `playlists/${playlistId}`, {
         params: {
             market,
             fields,
@@ -215,6 +214,7 @@ export async function getPlaylist(
 }
 
 export async function changePlaylistDetails(
+    sessionId: string,
     playlistId: string,
     name?: string,
     description?: string,
@@ -227,11 +227,12 @@ export async function changePlaylistDetails(
     if (publicPlaylist !== undefined) body.public = publicPlaylist;
     if (collaborative !== undefined) body.collaborative = collaborative;
 
-    await makeRequest("PUT", `playlists/${playlistId}`, { data: body });
+    await makeRequest(sessionId, "PUT", `playlists/${playlistId}`, { data: body });
     return { success: true };
 }
 
 export async function getPlaylistItems(
+    sessionId: string,
     playlistId: string,
     market?: string,
     fields?: string,
@@ -239,7 +240,7 @@ export async function getPlaylistItems(
     offset?: number,
     additionalTypes?: string
 ) {
-    const data = await makeRequest<any>("GET", `playlists/${playlistId}/tracks`, {
+    const data = await makeRequest<any>(sessionId, "GET", `playlists/${playlistId}/tracks`, {
         params: {
             market,
             fields,
@@ -260,6 +261,7 @@ export async function getPlaylistItems(
 }
 
 export async function updatePlaylistItems(
+    sessionId: string,
     playlistId: string,
     uris?: string[],
     rangeStart?: number,
@@ -280,7 +282,7 @@ export async function updatePlaylistItems(
     if (rangeLength !== undefined) body.range_length = rangeLength;
     if (snapshotId) body.snapshot_id = snapshotId;
 
-    const result = await makeRequest<any>("PUT", `playlists/${playlistId}/tracks`, {
+    const result = await makeRequest<any>(sessionId, "PUT", `playlists/${playlistId}/tracks`, {
         data: body,
         params: uris ? params : undefined,
     });
@@ -292,6 +294,7 @@ export async function updatePlaylistItems(
 }
 
 export async function addItemsToPlaylist(
+    sessionId: string,
     playlistId: string,
     uris: string[],
     position?: number
@@ -308,7 +311,7 @@ export async function addItemsToPlaylist(
         params.position = position;
     }
 
-    const result = await makeRequest<any>("POST", `playlists/${playlistId}/tracks`, {
+    const result = await makeRequest<any>(sessionId, "POST", `playlists/${playlistId}/tracks`, {
         data: body,
         params: Object.keys(params).length > 0 ? params : undefined,
     });
@@ -320,6 +323,7 @@ export async function addItemsToPlaylist(
 }
 
 export async function searchItems(
+    sessionId: string,
     q: string,
     type: string,
     market?: string,
@@ -327,7 +331,7 @@ export async function searchItems(
     offset?: number,
     include_external?: "audio"
 ) {
-    const data = await makeRequest<any>("GET", "search", {
+    const data = await makeRequest<any>(sessionId, "GET", "search", {
         params: {
             q,
             type,
@@ -349,15 +353,15 @@ export async function searchItems(
     };
 }
 
-export async function getTrack(id: string, market?: string) {
-    const data = await makeRequest("GET", `tracks/${id}`, {
+export async function getTrack(sessionId: string, id: string, market?: string) {
+    const data = await makeRequest<any>(sessionId, "GET", `tracks/${id}`, {
         params: { market },
     });
     return slimTrack(data);
 }
 
-export async function getSeveralTracks(ids: string, market?: string) {
-    const data = await makeRequest<any>("GET", "tracks", {
+export async function getSeveralTracks(sessionId: string, ids: string, market?: string) {
+    const data = await makeRequest<any>(sessionId, "GET", "tracks", {
         params: { ids, market },
     });
     return {
@@ -365,8 +369,8 @@ export async function getSeveralTracks(ids: string, market?: string) {
     };
 }
 
-export async function getSavedTracks(market?: string, limit?: number, offset?: number) {
-    const data = await makeRequest<any>("GET", "me/tracks", {
+export async function getSavedTracks(sessionId: string, market?: string, limit?: number, offset?: number) {
+    const data = await makeRequest<any>(sessionId, "GET", "me/tracks", {
         params: {
             market,
             limit: limit || 20,
@@ -385,37 +389,38 @@ export async function getSavedTracks(market?: string, limit?: number, offset?: n
     };
 }
 
-export async function saveTracks(ids: string) {
+export async function saveTracks(sessionId: string, ids: string) {
     const idArray = ids.split(',').map(id => id.trim());
-    await makeRequest("PUT", "me/tracks", {
+    await makeRequest(sessionId, "PUT", "me/tracks", {
         data: { ids: idArray },
     });
     return { success: true };
 }
 
-export async function removeSavedTracks(ids: string) {
+export async function removeSavedTracks(sessionId: string, ids: string) {
     const idArray = ids.split(',').map(id => id.trim());
-    await makeRequest("DELETE", "me/tracks", {
+    await makeRequest(sessionId, "DELETE", "me/tracks", {
         data: { ids: idArray },
     });
     return { success: true };
 }
 
-export async function checkSavedTracks(ids: string) {
-    return await makeRequest("GET", "me/tracks/contains", {
+export async function checkSavedTracks(sessionId: string, ids: string) {
+    return await makeRequest<any>(sessionId, "GET", "me/tracks/contains", {
         params: { ids },
     });
 }
 
-export async function getUserProfile(userId: string) {
-    return await makeRequest("GET", `users/${userId}`);
+export async function getUserProfile(sessionId: string, userId: string) {
+    return await makeRequest<any>(sessionId, "GET", `users/${userId}`);
 }
 
-export async function getCurrentUserProfile() {
-    return await makeRequest("GET", "me");
+export async function getCurrentUserProfile(sessionId: string) {
+    return await makeRequest<any>(sessionId, "GET", "me");
 }
 
 export async function getCurrentUserTopItems(
+    sessionId: string,
     type: "tracks" | "artists",
     time_range?: "medium_term" | "short_term" | "long_term",
     limit?: number,
@@ -423,7 +428,7 @@ export async function getCurrentUserTopItems(
 ) {
     const finalLimit = (limit && limit >= 1 && limit <= 50) ? limit : 20;
 
-    return await makeRequest("GET", `me/top/${type}`, {
+    return await makeRequest<any>(sessionId, "GET", `me/top/${type}`, {
         params: {
             time_range: time_range || "medium_term",
             limit: finalLimit,
@@ -432,20 +437,21 @@ export async function getCurrentUserTopItems(
     });
 }
 
-export async function followOrUnfollowPlaylist(playlistId: string, follow: boolean) {
+export async function followOrUnfollowPlaylist(sessionId: string, playlistId: string, follow: boolean) {
     const method = follow ? "PUT" : "DELETE";
-    await makeRequest(method, `playlists/${playlistId}/followers`);
+    await makeRequest(sessionId, method, `playlists/${playlistId}/followers`);
     return { success: true };
 }
 
 export async function getFollowedArtists(
+    sessionId: string,
     type: "artist",
     after?: string,
     limit?: number
 ) {
     const finalLimit = (limit && limit >= 1 && limit <= 50) ? limit : 20;
 
-    return await makeRequest("GET", "me/following", {
+    return await makeRequest<any>(sessionId, "GET", "me/following", {
         params: {
             type,
             after,
@@ -455,10 +461,11 @@ export async function getFollowedArtists(
 }
 
 export async function followArtistsOrUsers(
+    sessionId: string,
     type: "artist" | "user",
     ids: string
 ) {
-    await makeRequest("PUT", "me/following", {
+    await makeRequest(sessionId, "PUT", "me/following", {
         params: { type },
         data: {
             ids: ids.split(",").map(id => id.trim()),
@@ -468,10 +475,11 @@ export async function followArtistsOrUsers(
 }
 
 export async function unfollowArtistsOrUsers(
+    sessionId: string,
     type: "artist" | "user",
     ids: string
 ) {
-    await makeRequest("DELETE", "me/following", {
+    await makeRequest(sessionId, "DELETE", "me/following", {
         params: { type },
         data: {
             ids: ids.split(",").map(id => id.trim()),
@@ -481,16 +489,185 @@ export async function unfollowArtistsOrUsers(
 }
 
 export async function checkIfUserFollows(
+    sessionId: string,
     type: "artist" | "user",
     ids: string
 ) {
-    return await makeRequest("GET", "me/following/contains", {
+    return await makeRequest<any>(sessionId, "GET", "me/following/contains", {
         params: { type, ids },
     });
 }
 
-export async function checkIfCurrentUserFollowsPlaylist(playlistId: string, ids: string) {
-    return await makeRequest("GET", `playlists/${playlistId}/followers/contains`, {
+export async function checkIfCurrentUserFollowsPlaylist(sessionId: string, playlistId: string, ids: string) {
+    return await makeRequest<any>(sessionId, "GET", `playlists/${playlistId}/followers/contains`, {
         params: { ids },
     });
+}
+
+// ============ NEW FEATURES ============
+
+export async function getRecommendations(
+    sessionId: string,
+    seedArtists?: string,
+    seedTracks?: string,
+    seedGenres?: string,
+    targetEnergy?: number,
+    targetDanceability?: number,
+    targetValence?: number,
+    limit?: number
+) {
+    const params: any = {
+        limit: limit || 20,
+    };
+    
+    if (seedArtists) params.seed_artists = seedArtists;
+    if (seedTracks) params.seed_tracks = seedTracks;
+    if (seedGenres) params.seed_genres = seedGenres;
+    if (targetEnergy !== undefined) params.target_energy = targetEnergy;
+    if (targetDanceability !== undefined) params.target_danceability = targetDanceability;
+    if (targetValence !== undefined) params.target_valence = targetValence;
+
+    const data = await makeRequest<any>(sessionId, "GET", "recommendations", { params });
+    
+    return {
+        tracks: data.tracks.map(slimTrack),
+        seeds: data.seeds.map((seed: any) => ({
+            id: seed.id,
+            afterRelinking: seed.afterRelinking,
+            initialPoolSize: seed.initialPoolSize,
+            afterRelinkingTotal: seed.afterRelinkingTotal,
+        })),
+    };
+}
+
+export async function getNewReleases(sessionId: string, limit?: number, offset?: number) {
+    const data = await makeRequest<any>(sessionId, "GET", "browse/new-releases", {
+        params: {
+            limit: limit || 20,
+            offset: offset || 0,
+        },
+    });
+    
+    return {
+        albums: data.albums.items.map((album: any) => slimAlbum(album)),
+        total: data.albums.total,
+        next: data.albums.next,
+    };
+}
+
+export async function getFeaturedPlaylists(sessionId: string, limit?: number, offset?: number) {
+    const data = await makeRequest<any>(sessionId, "GET", "browse/featured-playlists", {
+        params: {
+            limit: limit || 20,
+            offset: offset || 0,
+        },
+    });
+    
+    return {
+        message: data.message,
+        playlists: data.playlists.items.map((playlist: any) => slimPlaylist(playlist)),
+        total: data.playlists.total,
+        next: data.playlists.next,
+    };
+}
+
+export async function createPlaylist(
+    sessionId: string,
+    name: string,
+    description?: string,
+    publicPlaylist?: boolean
+) {
+    const data = await makeRequest<any>(sessionId, "POST", "me/playlists", {
+        data: {
+            name,
+            description: description || "",
+            public: publicPlaylist || false,
+        },
+    });
+    
+    return slimPlaylist(data);
+}
+
+export async function getArtistTopTracks(sessionId: string, artistId: string, market?: string) {
+    const data = await makeRequest<any>(sessionId, "GET", `artists/${artistId}/top-tracks`, {
+        params: {
+            market: market || "US",
+        },
+    });
+    
+    return {
+        tracks: data.tracks.map(slimTrack),
+    };
+}
+
+export async function getArtistRelatedArtists(sessionId: string, artistId: string) {
+    const data = await makeRequest<any>(sessionId, "GET", `artists/${artistId}/related-artists`);
+    
+    return {
+        artists: data.artists.map((artist: any) => slimArtist(artist)),
+    };
+}
+
+export async function getArtistAlbums(
+    sessionId: string,
+    artistId: string,
+    includeGroups?: string,
+    limit?: number,
+    offset?: number
+) {
+    const data = await makeRequest<any>(sessionId, "GET", `artists/${artistId}/albums`, {
+        params: {
+            include_groups: includeGroups || "album,single",
+            limit: limit || 20,
+            offset: offset || 0,
+        },
+    });
+    
+    return {
+        items: data.items.map((album: any) => slimAlbum(album)),
+        total: data.total,
+        next: data.next,
+    };
+}
+
+export async function getAlbumTracks(sessionId: string, albumId: string, market?: string) {
+    const data = await makeRequest<any>(sessionId, "GET", `albums/${albumId}/tracks`, {
+        params: { market },
+    });
+    
+    return {
+        items: data.items.map(slimTrack),
+        total: data.total,
+    };
+}
+
+export async function getShowEpisodes(sessionId: string, showId: string, limit?: number, offset?: number) {
+    const data = await makeRequest<any>(sessionId, "GET", `shows/${showId}/episodes`, {
+        params: {
+            limit: limit || 20,
+            offset: offset || 0,
+        },
+    });
+    
+    return {
+        items: data.items.map((episode: any) => slimEpisode(episode)),
+        total: data.total,
+        next: data.next,
+    };
+}
+
+export async function removePlaylistItems(sessionId: string, playlistId: string, uris: string[], snapshotId?: string) {
+    const body: any = {
+        tracks: uris.map((uri) => ({ uri })),
+    };
+    if (snapshotId) body.snapshot_id = snapshotId;
+
+    const result = await makeRequest<any>(sessionId, "DELETE", `playlists/${playlistId}/tracks`, {
+        data: body,
+    });
+    
+    return {
+        snapshot_id: result.snapshot_id,
+        tracks_removed: result.tracks_removed,
+    };
 }
