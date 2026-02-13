@@ -1,1140 +1,131 @@
 import { z } from "zod";
-import {
-    getPlaybackState,
-    transferPlayback,
-    getAvailableDevices,
-    getCurrentlyPlayingTrack,
-    startResumePlayback,
-    pausePlayback,
-    skipToNext,
-    skipToPrevious,
-    seekToPosition,
-    setRepeatMode,
-    setPlaybackVolume,
-    togglePlaybackShuffle,
-    getRecentlyPlayedTracks,
-    getUserQueue,
-    addItemToPlaybackQueue,
-    getPlaylist,
-    changePlaylistDetails,
-    getPlaylistItems,
-    updatePlaylistItems,
-    addItemsToPlaylist,
-    searchItems,
-    getTrack,
-    getSeveralTracks,
-    getSavedTracks,
-    saveTracks,
-    removeSavedTracks,
-    checkSavedTracks,
-    getUserProfile,
-    getCurrentUserProfile,
-    getCurrentUserTopItems,
-    followOrUnfollowPlaylist,
-    getFollowedArtists,
-    followArtistsOrUsers,
-    unfollowArtistsOrUsers,
-    checkIfUserFollows,
-    checkIfCurrentUserFollowsPlaylist,
-} from "./requests.js";
-import { SpotifyUserProfile } from "../types/user.js";
+import * as R from "./requests.js";
 
-const GetPlaybackStateInputRawShape = {
-    market: z.string().optional(),
-    additional_types: z.string().optional()
-};
-const GetPlaybackStateInputSchema = z.object(GetPlaybackStateInputRawShape);
-type GetPlaybackStateInput = z.infer<typeof GetPlaybackStateInputSchema>;
-
-const getPlaybackStateTool = {
-    name: "get-playback-state",
-    config: {
-        title: "Get Playback State",
-        description: "Get information about the user's current playback state, including track or episode, progress, and active device.",
-        inputSchema: GetPlaybackStateInputRawShape,
-        authenticationRequired: true
-    },
-    handler: async (input: GetPlaybackStateInput) => {
-        const playbackState = await getPlaybackState(input.market, input.additional_types);
-        return {
-            content: [{ type: "text", text: JSON.stringify(playbackState) } as const],
-            structuredContent: playbackState,
-        };
-    }
-};
-
-const TransferPlaybackInputRawShape = {
-    device_ids: z.string().min(1, "Device ID cannot be empty"),
-    play: z.boolean().optional()
-};
-const TransferPlaybackInputSchema = z.object(TransferPlaybackInputRawShape);
-type TransferPlaybackInput = z.infer<typeof TransferPlaybackInputSchema>;
-
-const transferPlaybackTool = {
-    name: "transfer-playback",
-    config: {
-        title: "Transfer Playback",
-        description: "Transfer playback to a new device and optionally begin playback. Provide a device ID. Note: This only works for Spotify Premium users.",
-        inputSchema: TransferPlaybackInputRawShape,
-        authenticationRequired: true
-    },
-    handler: async (input: TransferPlaybackInput) => {
-        const deviceIds = input.device_ids.split(',').map(id => id.trim());
-        await transferPlayback(deviceIds, input.play);
-        const response = {
-            message: `Successfully transferred playback to device: ${input.device_ids}`,
-            action: "transferred"
-        };
-        return {
-            content: [{ type: "text", text: JSON.stringify(response) } as const],
-            structuredContent: response,
-        };
-    }
-};
-
-const GetAvailableDevicesInputRawShape = {};
-const GetAvailableDevicesInputSchema = z.object(GetAvailableDevicesInputRawShape);
-type GetAvailableDevicesInput = z.infer<typeof GetAvailableDevicesInputSchema>;
-
-const getAvailableDevicesTool = {
-    name: "get-available-devices",
-    config: {
-        title: "Get Available Devices",
-        description: "Get information about a user's available Spotify Connect devices. Some device models are not supported and will not be listed.",
-        inputSchema: GetAvailableDevicesInputRawShape,
-        authenticationRequired: true
-    },
-    handler: async (input: GetAvailableDevicesInput) => {
-        const devices = await getAvailableDevices();
-        return {
-            content: [{ type: "text", text: JSON.stringify(devices) } as const],
-            structuredContent: devices,
-        };
-    }
-};
-
-const GetCurrentlyPlayingTrackInputRawShape = {
-    market: z.string().optional(),
-    additional_types: z.string().optional()
-};
-const GetCurrentlyPlayingTrackInputSchema = z.object(GetCurrentlyPlayingTrackInputRawShape);
-type GetCurrentlyPlayingTrackInput = z.infer<typeof GetCurrentlyPlayingTrackInputSchema>;
-
-const getCurrentlyPlayingTrackTool = {
-    name: "get-currently-playing-track",
-    config: {
-        title: "Get Currently Playing Track",
-        description: "Get the track or episode currently being played on the user's Spotify account.",
-        inputSchema: GetCurrentlyPlayingTrackInputRawShape,
-        authenticationRequired: true
-    },
-    handler: async (input: GetCurrentlyPlayingTrackInput) => {
-        const currentTrack = await getCurrentlyPlayingTrack(input.market, input.additional_types);
-        return {
-            content: [{ type: "text", text: JSON.stringify(currentTrack) } as const],
-            structuredContent: currentTrack,
-        };
-    }
-};
-
-const StartResumePlaybackInputRawShape = {
-    device_id: z.string().optional(),
-    context_uri: z.string().optional(),
-    uris: z.string().optional(),
-    offset_position: z.number().optional(),
-    offset_uri: z.string().optional(),
-    position_ms: z.number().optional()
-};
-const StartResumePlaybackInputSchema = z.object(StartResumePlaybackInputRawShape);
-type StartResumePlaybackInput = z.infer<typeof StartResumePlaybackInputSchema>;
-
-const startResumePlaybackTool = {
-    name: "start-resume-playback",
-    config: {
-        title: "Start/Resume Playback",
-        description: "Start a new context or resume current playback on the user's active device. Provide context_uri (album/playlist URI) OR uris (comma-separated track URIs). Premium only.",
-        inputSchema: StartResumePlaybackInputRawShape,
-        authenticationRequired: true
-    },
-    handler: async (input: StartResumePlaybackInput) => {
-        const urisArray = input.uris ? input.uris.split(',').map(uri => uri.trim()) : undefined;
-        const offset = input.offset_position !== undefined || input.offset_uri
-            ? {
-                position: input.offset_position,
-                uri: input.offset_uri
-            }
-            : undefined;
-
-        await startResumePlayback(
-            input.device_id,
-            input.context_uri,
-            urisArray,
-            offset,
-            input.position_ms
-        );
-
-        const response = {
-            message: "Successfully started/resumed playback",
-            action: "play"
-        };
-        return {
-            content: [{ type: "text", text: JSON.stringify(response) } as const],
-            structuredContent: response,
-        };
-    }
-};
-
-const PausePlaybackInputRawShape = {
-    device_id: z.string().optional()
-};
-const PausePlaybackInputSchema = z.object(PausePlaybackInputRawShape);
-type PausePlaybackInput = z.infer<typeof PausePlaybackInputSchema>;
-
-const pausePlaybackTool = {
-    name: "pause-playback",
-    config: {
-        title: "Pause Playback",
-        description: "Pause playback on the user's account. Premium only.",
-        inputSchema: PausePlaybackInputRawShape,
-        authenticationRequired: true
-    },
-    handler: async (input: PausePlaybackInput) => {
-        await pausePlayback(input.device_id);
-        const response = {
-            message: "Successfully paused playback",
-            action: "pause"
-        };
-        return {
-            content: [{ type: "text", text: JSON.stringify(response) } as const],
-            structuredContent: response,
-        };
-    }
-};
-
-const SkipToNextInputRawShape = {
-    device_id: z.string().optional()
-};
-const SkipToNextInputSchema = z.object(SkipToNextInputRawShape);
-type SkipToNextInput = z.infer<typeof SkipToNextInputSchema>;
-
-const skipToNextTool = {
-    name: "skip-to-next",
-    config: {
-        title: "Skip To Next",
-        description: "Skips to the next track in the user’s queue. Premium only.",
-        inputSchema: SkipToNextInputRawShape,
-        authenticationRequired: true
-    },
-    handler: async (input: SkipToNextInput) => {
-        await skipToNext(input.device_id);
-        const response = {
-            message: "Successfully skipped to the next track",
-            action: "next"
-        };
-        return {
-            content: [{ type: "text", text: JSON.stringify(response) } as const],
-            structuredContent: response,
-        };
-    }
-};
-
-const SkipToPreviousInputRawShape = {
-    device_id: z.string().optional()
-};
-const SkipToPreviousInputSchema = z.object(SkipToPreviousInputRawShape);
-type SkipToPreviousInput = z.infer<typeof SkipToPreviousInputSchema>;
-
-const skipToPreviousTool = {
-    name: "skip-to-previous",
-    config: {
-        title: "Skip To Previous",
-        description: "Skips to the previous track in the user’s queue. Premium only.",
-        inputSchema: SkipToPreviousInputRawShape,
-        authenticationRequired: true
-    },
-    handler: async (input: SkipToPreviousInput) => {
-        await skipToPrevious(input.device_id);
-        const response = {
-            message: "Successfully skipped to the previous track",
-            action: "previous"
-        };
-        return {
-            content: [{ type: "text", text: JSON.stringify(response) } as const],
-            structuredContent: response,
-        };
-    }
-};
-
-const SeekToPositionInputRawShape = {
-    position_ms: z.number().int().min(0, "Position in milliseconds must be a positive number."),
-    device_id: z.string().optional()
-};
-const SeekToPositionInputSchema = z.object(SeekToPositionInputRawShape);
-type SeekToPositionInput = z.infer<typeof SeekToPositionInputSchema>;
-
-const seekToPositionTool = {
-    name: "seek-to-position",
-    config: {
-        title: "Seek To Position",
-        description: "Seeks to the given position in the user’s currently playing track. Premium only.",
-        inputSchema: SeekToPositionInputRawShape,
-        authenticationRequired: true
-    },
-    handler: async (input: SeekToPositionInput) => {
-        await seekToPosition(input.position_ms, input.device_id);
-        const response = {
-            message: `Successfully sought to position ${input.position_ms}ms`,
-            action: "seek"
-        };
-        return {
-            content: [{ type: "text", text: JSON.stringify(response) } as const],
-            structuredContent: response,
-        };
-    }
-};
-
-const SetRepeatModeInputRawShape = {
-    state: z.enum(["track", "context", "off"], {
-        errorMap: (issue, ctx) => {
-            if (issue.code === z.ZodIssueCode.invalid_enum_value) {
-                return { message: "State must be 'track', 'context', or 'off'." };
-            }
-            return { message: ctx.defaultError };
-        },
+const T = {
+    o: (d: string) => z.object({ deviceId: z.string().optional() }),
+    m: (d = "") => z.object({ market: z.string().optional(), ...(d && { [d]: z.string().optional() }) }),
+    p: (max = 50) => z.object({ limit: z.number().min(1).max(max).optional().default(20), offset: z.number().min(0).optional().default(0) }),
+    mkR: (n: string, d: string, s: z.ZodType<any>, h: (s: string, i: any) => Promise<any>) => ({
+        name: n, config: { title: n.replace(/-/g, " ").replace(/\b\w/g, (c: string) => c.toUpperCase()), description: d, inputSchema: s },
+        handler: async (c: any, i: any) => ({ content: [{ type: "text" as const, text: JSON.stringify(await h(c.sessionId, i)) }], structuredContent: await h(c.sessionId, i) })
     }),
-    device_id: z.string().optional()
-};
-const SetRepeatModeInputSchema = z.object(SetRepeatModeInputRawShape);
-type SetRepeatModeInput = z.infer<typeof SetRepeatModeInputSchema>;
-
-const setRepeatModeTool = {
-    name: "set-repeat-mode",
-    config: {
-        title: "Set Repeat Mode",
-        description: "Set the repeat mode for the user's playback. Premium only.",
-        inputSchema: SetRepeatModeInputRawShape,
-        authenticationRequired: true
-    },
-    handler: async (input: SetRepeatModeInput) => {
-        await setRepeatMode(input.state, input.device_id);
-        const response = {
-            message: `Successfully set repeat mode to ${input.state}`,
-            action: "set_repeat_mode"
-        };
-        return {
-            content: [{ type: "text", text: JSON.stringify(response) } as const],
-            structuredContent: response,
-        };
-    }
+    mkA: (n: string, d: string, s: z.ZodType<any>, h: (s: string, i: any) => Promise<any>) => ({
+        name: n, config: { title: n.replace(/-/g, " ").replace(/\b\w/g, (c: string) => c.toUpperCase()), description: d, inputSchema: s },
+        handler: async (c: any, i: any) => { await h(c.sessionId, i); return { content: [{ type: "text" as const, text: '{"success":true}' }], structuredContent: { success: true } }; }
+    }),
 };
 
-const SetPlaybackVolumeInputRawShape = {
-    volume_percent: z.number().int().min(0).max(100, "Volume percent must be between 0 and 100 inclusive."),
-    device_id: z.string().optional()
-};
-const SetPlaybackVolumeInputSchema = z.object(SetPlaybackVolumeInputRawShape);
-type SetPlaybackVolumeInput = z.infer<typeof SetPlaybackVolumeInputSchema>;
-
-const setPlaybackVolumeTool = {
-    name: "set-playback-volume",
-    config: {
-        title: "Set Playback Volume",
-        description: "Set the volume for the user’s current playback device. Premium only.",
-        inputSchema: SetPlaybackVolumeInputRawShape,
-        authenticationRequired: true
-    },
-    handler: async (input: SetPlaybackVolumeInput) => {
-        await setPlaybackVolume(input.volume_percent, input.device_id);
-        const response = {
-            message: `Successfully set playback volume to ${input.volume_percent}%`,
-            action: "set_volume"
-        };
-        return {
-            content: [{ type: "text", text: JSON.stringify(response) } as const],
-            structuredContent: response,
-        };
-    }
-};
-
-const TogglePlaybackShuffleInputRawShape = {
-    state: z.boolean(),
-    device_id: z.string().optional()
-};
-const TogglePlaybackShuffleInputSchema = z.object(TogglePlaybackShuffleInputRawShape);
-type TogglePlaybackShuffleInput = z.infer<typeof TogglePlaybackShuffleInputSchema>;
-
-const togglePlaybackShuffleTool = {
-    name: "toggle-playback-shuffle",
-    config: {
-        title: "Toggle Playback Shuffle",
-        description: "Toggle shuffle on or off for user’s playback. Premium only.",
-        inputSchema: TogglePlaybackShuffleInputRawShape,
-        authenticationRequired: true
-    },
-    handler: async (input: TogglePlaybackShuffleInput) => {
-        await togglePlaybackShuffle(input.state, input.device_id);
-        const response = {
-            message: `Successfully set shuffle to ${input.state ? "on" : "off"}`,
-            action: "toggle_shuffle"
-        };
-        return {
-            content: [{ type: "text", text: JSON.stringify(response) } as const],
-            structuredContent: response,
-        };
-    }
-};
-
-const GetRecentlyPlayedTracksInputRawShape = {
-    limit: z.number().int().min(1).max(50).optional(),
-    after: z.number().int().optional(),
-    before: z.number().int().optional()
-};
-const GetRecentlyPlayedTracksInputSchema = z.object(GetRecentlyPlayedTracksInputRawShape);
-type GetRecentlyPlayedTracksInput = z.infer<typeof GetRecentlyPlayedTracksInputSchema>;
-
-const getRecentlyPlayedTracksTool = {
-    name: "get-recently-played-tracks",
-    config: {
-        title: "Get Recently Played Tracks",
-        description: "Get tracks from the current user's recently played tracks. Note: Currently doesn't support podcast episodes.",
-        inputSchema: GetRecentlyPlayedTracksInputRawShape,
-        authenticationRequired: true
-    },
-    handler: async (input: GetRecentlyPlayedTracksInput) => {
-        const result = await getRecentlyPlayedTracks(input.limit, input.after, input.before);
-        return {
-            content: [{ type: "text", text: JSON.stringify(result) } as const],
-            structuredContent: result,
-        };
-    }
-};
-
-const GetUserQueueInputRawShape = {};
-const GetUserQueueInputSchema = z.object(GetUserQueueInputRawShape);
-type GetUserQueueInput = z.infer<typeof GetUserQueueInputSchema>;
-
-const getUserQueueTool = {
-    name: "get-user-queue",
-    config: {
-        title: "Get User's Queue",
-        description: "Get the list of objects that make up the user's queue.",
-        inputSchema: GetUserQueueInputRawShape,
-        authenticationRequired: true
-    },
-    handler: async (input: GetUserQueueInput) => {
-        const result = await getUserQueue();
-        return {
-            content: [{ type: "text", text: JSON.stringify(result) } as const],
-            structuredContent: result,
-        };
-    }
-};
-
-const AddItemToPlaybackQueueInputRawShape = {
-    uri: z.string().min(1, "URI cannot be empty"),
-    device_id: z.string().optional()
-};
-const AddItemToPlaybackQueueInputSchema = z.object(AddItemToPlaybackQueueInputRawShape);
-type AddItemToPlaybackQueueInput = z.infer<typeof AddItemToPlaybackQueueInputSchema>;
-
-const addItemToPlaybackQueueTool = {
-    name: "add-item-to-playback-queue",
-    config: {
-        title: "Add Item to Playback Queue",
-        description: "Add an item to be played next in the user's current playback queue. Premium only.",
-        inputSchema: AddItemToPlaybackQueueInputRawShape,
-        authenticationRequired: true
-    },
-    handler: async (input: AddItemToPlaybackQueueInput) => {
-        await addItemToPlaybackQueue(input.uri, input.device_id);
-        const response = {
-            message: `Successfully added ${input.uri} to the playback queue`,
-            action: "add_to_queue"
-        };
-        return {
-            content: [{ type: "text", text: JSON.stringify(response) } as const],
-            structuredContent: response,
-        };
-    }
-};
-
-const GetPlaylistInputRawShape = {
-    playlist_id: z.string().min(1, "Playlist ID cannot be empty"),
-    market: z.string().optional(),
-    fields: z.string().optional(),
-    additional_types: z.string().optional()
-};
-const GetPlaylistInputSchema = z.object(GetPlaylistInputRawShape);
-type GetPlaylistInput = z.infer<typeof GetPlaylistInputSchema>;
-
-const getPlaylistTool = {
-    name: "get-playlist",
-    config: {
-        title: "Get Playlist",
-        description: "Get a playlist owned by a Spotify user. Returns playlist details including tracks, owner information, and metadata. Use the 'fields' parameter to filter specific fields if needed.",
-        inputSchema: GetPlaylistInputRawShape,
-        authenticationRequired: true
-    },
-    handler: async (input: GetPlaylistInput) => {
-        const playlist = await getPlaylist(
-            input.playlist_id,
-            input.market,
-            input.fields,
-            input.additional_types
-        );
-        return {
-            content: [{ type: "text", text: JSON.stringify(playlist) } as const],
-            structuredContent: playlist,
-        };
-    }
-};
-
-const ChangePlaylistDetailsInputRawShape = {
-    playlist_id: z.string().min(1, "Playlist ID cannot be empty"),
-    name: z.string().optional(),
-    description: z.string().optional(),
-    public: z.boolean().optional(),
-    collaborative: z.boolean().optional()
-};
-const ChangePlaylistDetailsInputSchema = z.object(ChangePlaylistDetailsInputRawShape);
-type ChangePlaylistDetailsInput = z.infer<typeof ChangePlaylistDetailsInputSchema>;
-
-const changePlaylistDetailsTool = {
-    name: "change-playlist-details",
-    config: {
-        title: "Change Playlist Details",
-        description: "Change a playlist's name and public/private state. The user must own the playlist. Note: You can only set collaborative to true on non-public playlists.",
-        inputSchema: ChangePlaylistDetailsInputRawShape,
-        authenticationRequired: true
-    },
-    handler: async (input: ChangePlaylistDetailsInput) => {
-        await changePlaylistDetails(
-            input.playlist_id,
-            input.name,
-            input.description,
-            input.public,
-            input.collaborative
-        );
-        const response = {
-            message: "Successfully updated playlist details",
-            action: "update_playlist"
-        };
-        return {
-            content: [{ type: "text", text: JSON.stringify(response) } as const],
-            structuredContent: response,
-        };
-    }
-};
-
-const GetPlaylistItemsInputRawShape = {
-    playlist_id: z.string().min(1, "Playlist ID cannot be empty"),
-    market: z.string().optional(),
-    fields: z.string().optional(),
-    limit: z.number().int().min(1).max(50).optional(),
-    offset: z.number().int().min(0).optional(),
-    additional_types: z.string().optional()
-};
-const GetPlaylistItemsInputSchema = z.object(GetPlaylistItemsInputRawShape);
-type GetPlaylistItemsInput = z.infer<typeof GetPlaylistItemsInputSchema>;
-
-const getPlaylistItemsTool = {
-    name: "get-playlist-items",
-    config: {
-        title: "Get Playlist Items",
-        description: "Get full details of the items (tracks/episodes) of a playlist owned by a Spotify user. Supports pagination with limit and offset parameters.",
-        inputSchema: GetPlaylistItemsInputRawShape,
-        authenticationRequired: true
-    },
-    handler: async (input: GetPlaylistItemsInput) => {
-        const items = await getPlaylistItems(
-            input.playlist_id,
-            input.market,
-            input.fields,
-            input.limit,
-            input.offset,
-            input.additional_types
-        );
-        return {
-            content: [{ type: "text", text: JSON.stringify(items) } as const],
-            structuredContent: items,
-        };
-    }
-};
-
-const UpdatePlaylistItemsInputRawShape = {
-    playlist_id: z.string().min(1, "Playlist ID cannot be empty"),
-    uris: z.string().optional(),
-    range_start: z.number().int().min(0).optional(),
-    insert_before: z.number().int().min(0).optional(),
-    range_length: z.number().int().min(1).optional(),
-    snapshot_id: z.string().optional()
-};
-const UpdatePlaylistItemsInputSchema = z.object(UpdatePlaylistItemsInputRawShape);
-type UpdatePlaylistItemsInput = z.infer<typeof UpdatePlaylistItemsInputSchema>;
-
-const updatePlaylistItemsTool = {
-    name: "update-playlist-items",
-    config: {
-        title: "Update Playlist Items",
-        description: "Either reorder or replace items in a playlist. To reorder: provide range_start, insert_before, range_length, and snapshot_id. To replace: provide uris (comma-separated). Note: Replace and reorder are mutually exclusive operations. Maximum 100 items.",
-        inputSchema: UpdatePlaylistItemsInputRawShape,
-        authenticationRequired: true
-    },
-    handler: async (input: UpdatePlaylistItemsInput) => {
-        const urisArray = input.uris ? input.uris.split(',').map(uri => uri.trim()) : undefined;
-        const result = await updatePlaylistItems(
-            input.playlist_id,
-            urisArray,
-            input.range_start,
-            input.insert_before,
-            input.range_length,
-            input.snapshot_id
-        );
-        const response = {
-            message: "Successfully updated playlist items",
-            action: "update_items",
-            snapshot_id: result.snapshot_id
-        };
-        return {
-            content: [{ type: "text", text: JSON.stringify(response) } as const],
-            structuredContent: response,
-        };
-    }
-};
-
-const AddItemsToPlaylistInputRawShape = {
-    playlist_id: z.string().min(1, "Playlist ID cannot be empty"),
-    uris: z.string().min(1, "URIs cannot be empty"),
-    position: z.number().int().min(0).optional()
-};
-const AddItemsToPlaylistInputSchema = z.object(AddItemsToPlaylistInputRawShape);
-type AddItemsToPlaylistInput = z.infer<typeof AddItemsToPlaylistInputSchema>;
-
-const addItemsToPlaylistTool = {
-    name: "add-items-to-playlist",
-    config: {
-        title: "Add Items to Playlist",
-        description: "Add one or more items (tracks/episodes) to a user's playlist. Provide comma-separated URIs. Maximum 100 items. Use position parameter to insert at specific index (0-based), or omit to append to end.",
-        inputSchema: AddItemsToPlaylistInputRawShape,
-        authenticationRequired: true
-    },
-    handler: async (input: AddItemsToPlaylistInput) => {
-        const urisArray = input.uris.split(',').map(uri => uri.trim());
-        if (urisArray.length > 100) {
-            throw new Error("Maximum 100 items can be added in one request");
-        }
-        const result = await addItemsToPlaylist(
-            input.playlist_id,
-            urisArray,
-            input.position
-        );
-        const response = {
-            message: `Successfully added ${urisArray.length} item(s) to playlist`,
-            action: "add_items",
-            snapshot_id: result.snapshot_id
-        };
-        return {
-            content: [{ type: "text", text: JSON.stringify(response) } as const],
-            structuredContent: response,
-        };
-    }
-};
-
-const SearchItemsInputRawShape = {
-    q: z.string().min(1, "Search query cannot be empty"),
-    type: z.string().min(1, "Type cannot be empty"),
-    market: z.string().optional(),
-    limit: z.number().int().min(1).max(50).optional(),
-    offset: z.number().int().min(0).optional(),
-    include_external: z.enum(["audio"]).optional()
-};
-const SearchItemsInputSchema = z.object(SearchItemsInputRawShape);
-type SearchItemsInput = z.infer<typeof SearchItemsInputSchema>;
-
-const searchItemsTool = {
-    name: "search-items",
-    config: {
-        title: "Search for Items",
-        description: "Get Spotify catalog information about albums, artists, playlists, tracks, shows, episodes or audiobooks that match a keyword string. Provide a query (q) and type (album, artist, playlist, track, show, episode, audiobook).",
-        inputSchema: SearchItemsInputRawShape,
-        authenticationRequired: true
-    },
-    handler: async (input: SearchItemsInput) => {
-        const result = await searchItems(
-            input.q,
-            input.type,
-            input.market,
-            input.limit,
-            input.offset,
-            input.include_external
-        );
-        return {
-            content: [{ type: "text", text: JSON.stringify(result) } as const],
-            structuredContent: result,
-        };
-    }
-};
-
-const GetTrackInputRawShape = {
-    id: z.string().min(1, "Track ID cannot be empty"),
-    market: z.string().optional()
-};
-const GetTrackInputSchema = z.object(GetTrackInputRawShape);
-type GetTrackInput = z.infer<typeof GetTrackInputSchema>;
-
-const getTrackTool = {
-    name: "get-track",
-    config: {
-        title: "Get Track",
-        description: "Get Spotify catalog information (name, artists, album, popularity, etc.) for a single track by its unique Spotify ID.",
-        inputSchema: GetTrackInputRawShape,
-        authenticationRequired: true
-    },
-    handler: async (input: GetTrackInput) => {
-        const track = await getTrack(input.id, input.market);
-        return {
-            content: [{ type: "text", text: JSON.stringify(track) } as const],
-            structuredContent: track,
-        };
-    }
-};
-
-const GetSeveralTracksInputRawShape = {
-    ids: z.string().min(1, "Track IDs cannot be empty. Provide a comma-separated list."),
-    market: z.string().optional()
-};
-const GetSeveralTracksInputSchema = z.object(GetSeveralTracksInputRawShape);
-type GetSeveralTracksInput = z.infer<typeof GetSeveralTracksInputSchema>;
-
-const getSeveralTracksTool = {
-    name: "get-several-tracks",
-    config: {
-        title: "Get Several Tracks",
-        description: "Get Spotify catalog information for multiple tracks. Provide a comma-separated list of Spotify IDs (max 50).",
-        inputSchema: GetSeveralTracksInputRawShape,
-        authenticationRequired: true
-    },
-    handler: async (input: GetSeveralTracksInput) => {
-        const tracks = await getSeveralTracks(input.ids, input.market);
-        return {
-            content: [{ type: "text", text: JSON.stringify(tracks) } as const],
-            structuredContent: tracks,
-        };
-    }
-};
-
-const GetSavedTracksInputRawShape = {
-    market: z.string().optional(),
-    limit: z.number().min(1).max(50).optional(),
-    offset: z.number().min(0).optional()
-};
-const GetSavedTracksInputSchema = z.object(GetSavedTracksInputRawShape);
-type GetSavedTracksInput = z.infer<typeof GetSavedTracksInputSchema>;
-
-const getSavedTracksTool = {
-    name: "get-saved-tracks",
-    config: {
-        title: "Get User's Saved Tracks",
-        description: "Get a paginated list of the songs saved in the current user's 'Your Music' library.",
-        inputSchema: GetSavedTracksInputRawShape,
-        authenticationRequired: true
-    },
-    handler: async (input: GetSavedTracksInput) => {
-        const savedTracks = await getSavedTracks(input.market, input.limit, input.offset);
-        return {
-            content: [{ type: "text", text: JSON.stringify(savedTracks) } as const],
-            structuredContent: savedTracks,
-        };
-    }
-};
-
-const SaveTracksInputRawShape = {
-    ids: z.string().min(1, "Track IDs cannot be empty. Provide a comma-separated list.")
-};
-const SaveTracksInputSchema = z.object(SaveTracksInputRawShape);
-type SaveTracksInput = z.infer<typeof SaveTracksInputSchema>;
-
-const saveTracksTool = {
-    name: "save-tracks-for-current-user",
-    config: {
-        title: "Save Tracks for Current User",
-        description: "Save one or more tracks to the current user's 'Your Music' library. Provide a comma-separated list of IDs (max 50).",
-        inputSchema: SaveTracksInputRawShape,
-        authenticationRequired: true
-    },
-    handler: async (input: SaveTracksInput) => {
-        await saveTracks(input.ids);
-        const response = {
-            message: `Successfully saved tracks: ${input.ids}`,
-            action: "saved"
-        };
-        return {
-            content: [{ type: "text", text: JSON.stringify(response) } as const],
-            structuredContent: response,
-        };
-    }
-};
-
-const RemoveSavedTracksInputRawShape = {
-    ids: z.string().min(1, "Track IDs cannot be empty. Provide a comma-separated list.")
-};
-const RemoveSavedTracksInputSchema = z.object(RemoveSavedTracksInputRawShape);
-type RemoveSavedTracksInput = z.infer<typeof RemoveSavedTracksInputSchema>;
-
-const removeSavedTracksTool = {
-    name: "remove-users-saved-tracks",
-    config: {
-        title: "Remove User's Saved Tracks",
-        description: "Remove one or more tracks from the current user's 'Your Music' library. Provide a comma-separated list of IDs (max 50).",
-        inputSchema: RemoveSavedTracksInputRawShape,
-        authenticationRequired: true
-    },
-    handler: async (input: RemoveSavedTracksInput) => {
-        await removeSavedTracks(input.ids);
-        const response = {
-            message: `Successfully removed tracks: ${input.ids}`,
-            action: "removed"
-        };
-        return {
-            content: [{ type: "text", text: JSON.stringify(response) } as const],
-            structuredContent: response,
-        };
-    }
-};
-
-const CheckSavedTracksInputRawShape = {
-    ids: z.string().min(1, "Track IDs cannot be empty. Provide a comma-separated list.")
-};
-const CheckSavedTracksInputSchema = z.object(CheckSavedTracksInputRawShape);
-type CheckSavedTracksInput = z.infer<typeof CheckSavedTracksInputSchema>;
-
-const checkSavedTracksTool = {
-    name: "check-users-saved-tracks",
-    config: {
-        title: "Check User's Saved Tracks",
-        description: "Check if one or more tracks are already saved in the user's library. Returns an array of booleans. Provide comma-separated IDs (max 50).",
-        inputSchema: CheckSavedTracksInputRawShape,
-        authenticationRequired: true
-    },
-    handler: async (input: CheckSavedTracksInput) => {
-        const statuses = await checkSavedTracks(input.ids);
-        const response = {
-            ids: input.ids.split(',').map(id => id.trim()),
-            statuses: statuses
-        };
-        return {
-            content: [{ type: "text", text: JSON.stringify(response) } as const],
-            structuredContent: response,
-        };
-    }
-};
-
-const FollowOrUnfollowPlaylistInputRawShape = {
-    playlistId: z.string().min(1, "Playlist ID cannot be empty"),
-    follow: z.boolean().optional()  // default follow = true
-};
-
-const FollowOrUnfollowPlaylistInputSchema = z.object(FollowOrUnfollowPlaylistInputRawShape);
-
-type FollowOrUnfollowPlaylistInput = z.infer<typeof FollowOrUnfollowPlaylistInputSchema>;
-
-const followOrUnfollowPlaylistTool = {
-    name: "follow-or-unfollow-playlist",
-    config: {
-        title: "Follow or Unfollow Playlist",
-        description: "Follow or unfollow a Spotify playlist to User's profile by its ID.",
-        inputSchema: FollowOrUnfollowPlaylistInputRawShape,
-        authenticationRequired: true
-    },
-
-    handler: async (input: FollowOrUnfollowPlaylistInput) => {
-        const follow = input.follow ?? true; // default = follow
-        await followOrUnfollowPlaylist(input.playlistId, follow);
-
-        const response = {
-            message: follow
-                ? `Successfully followed playlist ${input.playlistId}`
-                : `Successfully unfollowed playlist ${input.playlistId}`,
-            playlistId: input.playlistId,
-            action: follow ? "followed" : "unfollowed"
-        };
-
-        return {
-            content: [{ type: "text", text: JSON.stringify(response) } as const],
-            structuredContent: response
-        };
-    }
-};
-
-
-const UserProfileInputRawShape = {
-    userId: z.string().min(1, "User ID cannot be empty"),
-};
-
-const UserProfileInputSchema = z.object(UserProfileInputRawShape);
-
-type UserProfileInput = z.infer<typeof UserProfileInputSchema>;
-
-const getUserProfileTool = {
-    name: "get-user-profile",
-    config: {
-        title: "Get User Profile",
-        description: "Get detailed profile information about a Spotify user by their user ID (including the user's username, country, email, explicit_content, followers, images, url, uri).",
-        inputSchema: UserProfileInputRawShape,
-        authenticationRequired: true
-    },
-    handler: async (input: UserProfileInput) => {
-        const profile = await getUserProfile(input.userId);
-        return {
-            content: [{ type: "text", text: JSON.stringify(profile) } as const],
-            structuredContent: profile,
-        };
-    }
-}
-
-
-
-const TopItemsInputRawShape = {
-    type: z.enum(["tracks", "artists"]),
-    time_range: z.enum(["medium_term", "short_term", "long_term"]).optional(),
-    limit: z.number().optional(),
-    offset: z.number().optional()
-};
-
-const TopItemsInputSchema = z.object(TopItemsInputRawShape);
-
-type TopItemsInput = z.infer<typeof TopItemsInputSchema>;
-
-const getCurrentUserTopItemsTool = {
-    name: "get-current-user-top-items",
-    config:
-    {
-        title: "Get Current User Top Items",
-        description: "(REQUIRES AUTHENTICATION) Get the current user's top tracks or artists based on calculated affinity. You can specify the type (tracks or artists), time range (short_term, medium_term, long_term), limit (1-50), and offset for pagination.",
-        inputSchema: TopItemsInputRawShape,
-        authenticationRequired: true
-    },
-    handler: async (input: TopItemsInput) => {
-        const result = await getCurrentUserTopItems(
-            input.type,
-            input.time_range,
-            input.limit,
-            input.offset
-        );
-        return {
-            content: [{ type: "text", text: JSON.stringify(result) } as const],
-            structuredContent: result,
-        };
-    }
-}
-
-const getCurrentUserProfileTool = {
-    name: "get-current-user-profile",
-    config:
-    {
-        title: "Get Current User Profile",
-        description:
-            "(REQUIRES AUTHENTICATION) Get detailed profile information about the current user (including the current user's username, country, email, explicit_content,followers,images,url,uri",
-        inputSchema: {},
-        authenticationRequired: true
-    },
-    handler: async () => {
-        const profile: SpotifyUserProfile = await getCurrentUserProfile() as SpotifyUserProfile;
-        return {
-            content: [{ type: "text", text: JSON.stringify(profile) } as const],
-            structuredContent: profile,
-        };
-    },
-}
-
-const GetFollowedArtistsInputRawShape = {
-    type: z.literal("artist"),
-    after: z.string().optional(),
-    limit: z.number().min(1).max(50).optional()
-};
-
-const GetFollowedArtistsInputSchema = z.object(GetFollowedArtistsInputRawShape);
-
-type GetFollowedArtistsInput = z.infer<typeof GetFollowedArtistsInputSchema>;
-
-const getFollowedArtistsTool = {
-    name: "get-followed-artists",
-    config: {
-        title: "Get Followed Artists",
-        description: "Get the current user's followed artists. Returns artist information including name, genres, popularity, followers, and images.",
-        inputSchema: GetFollowedArtistsInputRawShape,
-        authenticationRequired: true
-    },
-    handler: async (input: GetFollowedArtistsInput) => {
-        const result = await getFollowedArtists(
-            input.type,
-            input.after,
-            input.limit
-        );
-        return {
-            content: [{ type: "text", text: JSON.stringify(result) } as const],
-            structuredContent: result
-        };
-    }
-};
-
-// Follow Artists or Users Tool
-const FollowArtistsOrUsersInputRawShape = {
-    type: z.enum(["artist", "user"]),
-    ids: z.string().min(1, "IDs cannot be empty")
-};
-
-const FollowArtistsOrUsersInputSchema = z.object(FollowArtistsOrUsersInputRawShape);
-
-type FollowArtistsOrUsersInput = z.infer<typeof FollowArtistsOrUsersInputSchema>;
-
-const followArtistsOrUsersTool = {
-    name: "follow-artists-or-users",
-    config: {
-        title: "Follow Artists or Users",
-        description: "Add the current user as a follower of one or more artists or Spotify users. Provide a comma-separated list of IDs (max 50).",
-        inputSchema: FollowArtistsOrUsersInputRawShape,
-        authenticationRequired: true
-    },
-    handler: async (input: FollowArtistsOrUsersInput) => {
-        await followArtistsOrUsers(input.type, input.ids);
-        const response = {
-            message: `Successfully followed ${input.type}(s)`,
-            type: input.type,
-            ids: input.ids
-        };
-        return {
-            content: [{ type: "text", text: JSON.stringify(response) } as const],
-            structuredContent: response
-        };
-    }
-};
-
-// Unfollow Artists or Users Tool
-const unfollowArtistsOrUsersTool = {
-    name: "unfollow-artists-or-users",
-    config: {
-        title: "Unfollow Artists or Users",
-        description: "Remove the current user as a follower of one or more artists or Spotify users. Provide a comma-separated list of IDs (max 50).",
-        inputSchema: FollowArtistsOrUsersInputRawShape,
-        authenticationRequired: true
-    },
-    handler: async (input: FollowArtistsOrUsersInput) => {
-        await unfollowArtistsOrUsers(input.type, input.ids);
-        const response = {
-            message: `Successfully unfollowed ${input.type}(s)`,
-            type: input.type,
-            ids: input.ids
-        };
-        return {
-            content: [{ type: "text", text: JSON.stringify(response) } as const],
-            structuredContent: response
-        };
-    }
-};
-
-// Check If User Follows Artists or Users Tool
-const CheckIfUserFollowsInputRawShape = {
-    type: z.enum(["artist", "user"]),
-    ids: z.string().min(1, "IDs cannot be empty")
-};
-
-const CheckIfUserFollowsInputSchema = z.object(CheckIfUserFollowsInputRawShape);
-
-type CheckIfUserFollowsInput = z.infer<typeof CheckIfUserFollowsInputSchema>;
-
-const checkIfUserFollowsTool = {
-    name: "check-if-user-follows",
-    config: {
-        title: "Check If User Follows Artists or Users",
-        description: "Check to see if the current user is following one or more artists or other Spotify users. Returns an array of booleans. Provide comma-separated IDs (max 50).",
-        inputSchema: CheckIfUserFollowsInputRawShape,
-        authenticationRequired: true
-    },
-    handler: async (input: CheckIfUserFollowsInput) => {
-        const result = await checkIfUserFollows(input.type, input.ids);
-        const response = {
-            type: input.type,
-            ids: input.ids,
-            statuses: result
-        };
-        return {
-            content: [{ type: "text", text: JSON.stringify(response) } as const],
-            structuredContent: response
-        };
-    }
-};
-
-// Check If Current User Follows Playlist Tool
-const CheckIfCurrentUserFollowsPlaylistInputRawShape = {
-    playlistId: z.string().min(1, "Playlist ID cannot be empty"),
-    ids: z.string().min(1, "User IDs cannot be empty")
-};
-
-const CheckIfCurrentUserFollowsPlaylistInputSchema = z.object(
-    CheckIfCurrentUserFollowsPlaylistInputRawShape
-);
-
-type CheckIfCurrentUserFollowsPlaylistInput = z.infer<
-    typeof CheckIfCurrentUserFollowsPlaylistInputSchema
->;
-
-const checkIfCurrentUserFollowsPlaylistTool = {
-    name: "check-if-current-user-follows-playlist",
-    config: {
-        title: "Check If Current User Follows Playlist",
-        description: "Check to see if the current user is following a specified playlist. Returns a boolean value.",
-        inputSchema: CheckIfCurrentUserFollowsPlaylistInputRawShape,
-        authenticationRequired: true
-    },
-    handler: async (input: CheckIfCurrentUserFollowsPlaylistInput) => {
-        const result = await checkIfCurrentUserFollowsPlaylist(input.playlistId, input.ids);
-        const response = {
-            playlistId: input.playlistId,
-            isFollowing: result
-        };
-        return {
-            content: [{ type: "text", text: JSON.stringify(response) } as const],
-            structuredContent: response
-        };
-    }
-};
+// PLAYBACK
+export const getPlayState = T.mkR("get-playback-state", "Get current playback state", T.m(), (s, i) => R.getPlaybackState(s, i.market));
+export const getCurrPlay = T.mkR("get-currently-playing", "Get currently playing track", T.m(), (s, i) => R.getCurrentlyPlaying(s, i.market));
+export const getDevs = T.mkR("get-available-devices", "Get available devices", z.object({}), s => R.getDevices(s));
+export const startPlay = T.mkA("start-resume-playback", "Start/resume playback", z.object({ deviceId: z.string().optional(), contextUri: z.string().optional(), uris: z.array(z.string()).optional(), positionMs: z.number().optional() }), (s, i) => R.play(s, i.deviceId, { context_uri: i.contextUri, uris: i.uris, position_ms: i.positionMs }));
+export const pausePlay = T.mkA("pause-playback", "Pause playback", T.o(""), (s, i) => R.pause(s, i.deviceId));
+export const skipNext = T.mkA("skip-to-next", "Skip to next", T.o(""), (s, i) => R.next(s, i.deviceId));
+export const skipPrev = T.mkA("skip-to-previous", "Skip to previous", T.o(""), (s, i) => R.prev(s, i.deviceId));
+export const seekPos = T.mkA("seek-to-position", "Seek to position (ms)", z.object({ positionMs: z.number().min(0), deviceId: z.string().optional() }), (s, i) => R.seek(s, i.positionMs, i.deviceId));
+export const setRep = T.mkA("set-repeat-mode", "Set repeat mode", z.object({ state: z.enum(["track", "context", "off"]), deviceId: z.string().optional() }), (s, i) => R.repeat(s, i.state, i.deviceId));
+export const setVol = T.mkA("set-playback-volume", "Set volume 0-100", z.object({ volumePercent: z.number().min(0).max(100), deviceId: z.string().optional() }), (s, i) => R.volume(s, i.volumePercent, i.deviceId));
+export const togShuf = T.mkA("toggle-shuffle", "Toggle shuffle", z.object({ state: z.boolean(), deviceId: z.string().optional() }), (s, i) => R.shuffle(s, i.state, i.deviceId));
+export const getRec = T.mkR("get-recently-played", "Get recently played", z.object({ limit: z.number().min(1).max(50).optional().default(20) }), (s, i) => R.recent(s, i.limit));
+export const getQue = T.mkR("get-user-queue", "Get user queue", z.object({}), s => R.queue(s));
+export const addQue = T.mkA("add-to-queue", "Add to queue", z.object({ uri: z.string(), deviceId: z.string().optional() }), (s, i) => R.addQ(s, i.uri, i.deviceId));
+export const rmQue = T.mkA("remove-from-queue", "Remove from queue", z.object({ uri: z.string(), deviceId: z.string().optional() }), (s, i) => R.rmQ(s, i.uri, i.deviceId));
+
+// PLAYLIST
+export const getPl = T.mkR("get-playlist", "Get playlist details", z.object({ playlistId: z.string().min(1), market: z.string().optional() }), (s, i) => R.getPlaylist(s, i.playlistId, i.market));
+export const getPlItems = T.mkR("get-playlist-items", "Get playlist tracks", z.object({ playlistId: z.string().min(1), limit: z.number().min(1).max(50).optional().default(20), offset: z.number().min(0).optional().default(0), market: z.string().optional() }), (s, i) => R.getPlTracks(s, i.playlistId, i.limit, i.offset, i.market));
+export const getUsrPls = T.mkR("get-user-playlists", "Get user playlists", z.object({ limit: z.number().min(1).max(50).optional().default(20), offset: z.number().min(0).optional().default(0) }), (s, i) => R.getMyPlaylists(s, i.limit, i.offset));
+export const crPl = T.mkA("create-playlist", "Create playlist", z.object({ name: z.string().min(1), description: z.string().optional(), public: z.boolean().optional().default(false) }), (s, i) => R.createPlaylist(s, i.name, i.description, i.public));
+export const addPlIt = T.mkA("add-items-to-playlist", "Add items to playlist", z.object({ playlistId: z.string().min(1), uris: z.array(z.string()).min(1), position: z.number().optional() }), (s, i) => R.addToPlaylist(s, i.playlistId, i.uris, i.position));
+export const rmPlIt = T.mkA("remove-playlist-items", "Remove items", z.object({ playlistId: z.string().min(1), uris: z.array(z.string()).min(1) }), (s, i) => R.rmFromPlaylist(s, i.playlistId, i.uris));
+export const folPl = T.mkA("follow-playlist", "Follow playlist", z.object({ playlistId: z.string().min(1) }), (s, i) => R.followPl(s, i.playlistId));
+export const unfolPl = T.mkA("unfollow-playlist", "Unfollow playlist", z.object({ playlistId: z.string().min(1) }), (s, i) => R.unfollowPl(s, i.playlistId));
+
+// LIBRARY
+export const getTracks = T.mkR("get-saved-tracks", "Get saved tracks", z.object({ limit: z.number().min(1).max(50).optional().default(20), offset: z.number().min(0).optional().default(0), market: z.string().optional() }), (s, i) => R.getSavedTracks(s, i.limit, i.offset, i.market));
+export const saveTracks = T.mkA("save-tracks", "Save tracks", z.object({ ids: z.string().min(1) }), (s, i) => R.saveTracks(s, i.ids.split(",").map((x: string) => x.trim())));
+export const rmTracks = T.mkA("remove-saved-tracks", "Remove saved tracks", z.object({ ids: z.string().min(1) }), (s, i) => R.rmSavedTracks(s, i.ids.split(",").map((x: string) => x.trim())));
+export const getAlbums = T.mkR("get-saved-albums", "Get saved albums", z.object({ limit: z.number().min(1).max(50).optional().default(20), offset: z.number().min(0).optional().default(0) }), (s, i) => R.getSavedAlbums(s, i.limit, i.offset));
+export const saveAlbums = T.mkA("save-albums", "Save albums", z.object({ ids: z.string().min(1) }), (s, i) => R.saveAlbums(s, i.ids.split(",").map((x: string) => x.trim())));
+export const rmAlbums = T.mkA("remove-saved-albums", "Remove saved albums", z.object({ ids: z.string().min(1) }), (s, i) => R.rmSavedAlbums(s, i.ids.split(",").map((x: string) => x.trim())));
+export const getShows = T.mkR("get-saved-shows", "Get saved shows", z.object({ limit: z.number().min(1).max(50).optional().default(20), offset: z.number().min(0).optional().default(0) }), (s, i) => R.getSavedShows(s, i.limit, i.offset));
+export const saveShows = T.mkA("save-shows", "Save shows", z.object({ ids: z.string().min(1) }), (s, i) => R.saveShows(s, i.ids.split(",").map((x: string) => x.trim())));
+export const rmShows = T.mkA("remove-saved-shows", "Remove saved shows", z.object({ ids: z.string().min(1) }), (s, i) => R.rmSavedShows(s, i.ids.split(",").map((x: string) => x.trim())));
+export const getEps = T.mkR("get-saved-episodes", "Get saved episodes", z.object({ limit: z.number().min(1).max(50).optional().default(20), offset: z.number().min(0).optional().default(0), market: z.string().optional() }), (s, i) => R.getSavedEps(s, i.limit, i.offset, i.market));
+export const rmEps = T.mkA("remove-saved-episodes", "Remove saved episodes", z.object({ ids: z.string().min(1) }), (s, i) => R.rmSavedEps(s, i.ids.split(",").map((x: string) => x.trim())));
+export const getArt = T.mkR("get-followed-artists", "Get followed artists", z.object({ limit: z.number().min(1).max(50).optional().default(20), after: z.string().optional() }), (s, i) => R.getFollowedArtists(s, i.limit, i.after));
+export const folArt = T.mkA("follow-artists", "Follow artists", z.object({ ids: z.string().min(1) }), (s, i) => R.followArtists(s, i.ids.split(",").map((x: string) => x.trim())));
+export const unfolArt = T.mkA("unfollow-artists", "Unfollow artists", z.object({ ids: z.string().min(1) }), (s, i) => R.unfollowArtists(s, i.ids.split(",").map((x: string) => x.trim())));
+
+// SEARCH
+export const search = T.mkR("search-items", "Search tracks/artists/albums/playlists", z.object({ q: z.string().min(1), types: z.array(z.string()).optional().default(["track", "artist", "album", "playlist"]), limit: z.number().min(1).max(50).optional().default(20), market: z.string().optional() }), (s, i) => R.search(s, i.q, i.types.join(","), i.limit, i.market));
+
+// USER
+export const getMe = T.mkR("get-current-user-profile", "Get current user profile", z.object({}), s => R.getMe(s));
+export const getUser = T.mkR("get-user-profile", "Get user by ID", z.object({ userId: z.string().min(1) }), (s, i) => R.getUser(s, i.userId));
+export const getTop = T.mkR("get-user-top-items", "Get top tracks/artists", z.object({ type: z.enum(["tracks", "artists"]), timeRange: z.enum(["short_term", "medium_term", "long_term"]).optional().default("medium_term"), limit: z.number().min(1).max(50).optional().default(20) }), (s, i) => R.getTop(s, i.type, i.limit, i.timeRange));
+export const fol = T.mkA("follow-artists-or-users", "Follow artists/users", z.object({ type: z.enum(["artist", "user"]), ids: z.string().min(1) }), (s, i) => i.type === "artist" ? R.followArtists(s, i.ids.split(",").map((x: string) => x.trim())) : R.followUsers(s, i.ids.split(",").map((x: string) => x.trim())));
+export const unfol = T.mkA("unfollow-artists-or-users", "Unfollow artists/users", z.object({ type: z.enum(["artist", "user"]), ids: z.string().min(1) }), (s, i) => i.type === "artist" ? R.unfollowArtists(s, i.ids.split(",").map((x: string) => x.trim())) : R.unfollowUsers(s, i.ids.split(",").map((x: string) => x.trim())));
+export const chkFol = T.mkR("check-if-user-follows", "Check if following", z.object({ type: z.enum(["artist", "user"]), ids: z.string().min(1) }), (s, i) => R.checkFollows(s, i.type, i.ids.split(",").map((x: string) => x.trim())));
+
+// DISCOVER
+export const getRecs = T.mkR("get-recommendations", "Get recommendations", z.object({ seedArtists: z.string().optional(), seedTracks: z.string().optional(), seedGenres: z.string().optional(), targetEnergy: z.number().min(0).max(1).optional(), targetDanceability: z.number().min(0).max(1).optional(), targetValence: z.number().min(0).max(1).optional(), limit: z.number().min(1).max(100).optional().default(20), market: z.string().optional() }), (s, i) => {
+    const p: any = {};
+    if (i.seedArtists) p.seed_artists = i.seedArtists;
+    if (i.seedTracks) p.seed_tracks = i.seedTracks;
+    if (i.seedGenres) p.seed_genres = i.seedGenres;
+    if (i.targetEnergy !== undefined) p.target_energy = i.targetEnergy;
+    if (i.targetDanceability !== undefined) p.target_danceability = i.targetDanceability;
+    if (i.targetValence !== undefined) p.target_valence = i.targetValence;
+    if (i.limit) p.limit = i.limit;
+    if (i.market) p.market = i.market;
+    return R.recs(s, p);
+});
+export const getGens = T.mkR("get-available-genres", "Get available genres", z.object({}), s => R.genres(s));
+export const getMkts = T.mkR("get-available-markets", "Get available markets", z.object({}), s => R.markets(s));
+export const getNew = T.mkR("get-new-releases", "Get new releases", z.object({ limit: z.number().min(1).max(50).optional().default(20), offset: z.number().min(0).optional().default(0) }), (s, i) => R.newReleases(s, i.limit, i.offset));
+export const getFeat = T.mkR("get-featured-playlists", "Get featured playlists", z.object({ limit: z.number().min(1).max(50).optional().default(20), offset: z.number().min(0).optional().default(0) }), (s, i) => R.featured(s, i.limit, i.offset));
+export const getCats = T.mkR("get-browse-categories", "Get browse categories", z.object({ limit: z.number().min(1).max(50).optional().default(20), offset: z.number().min(0).optional().default(0) }), (s, i) => R.categories(s, i.limit, i.offset));
+export const getCatPls = T.mkR("get-category-playlists", "Get category playlists", z.object({ categoryId: z.string().min(1), limit: z.number().min(1).max(50).optional().default(20), offset: z.number().min(0).optional().default(0) }), (s, i) => R.catPlaylists(s, i.categoryId, i.limit, i.offset));
+export const artTop = T.mkR("get-artist-top-tracks", "Get artist top tracks", z.object({ artistId: z.string().min(1), market: z.string().optional() }), (s, i) => R.artistTop(s, i.artistId, i.market));
+export const artRel = T.mkR("get-artist-related-artists", "Get related artists", z.object({ artistId: z.string().min(1) }), (s, i) => R.relatedArtists(s, i.artistId));
+export const artAlb = T.mkR("get-artist-albums", "Get artist albums", z.object({ artistId: z.string().min(1), includeGroups: z.string().optional(), limit: z.number().min(1).max(50).optional().default(20), offset: z.number().min(0).optional().default(0) }), (s, i) => R.artistAlbums(s, i.artistId, i.limit, i.offset, i.includeGroups));
+export const albTr = T.mkR("get-album-tracks", "Get album tracks", z.object({ albumId: z.string().min(1), market: z.string().optional() }), (s, i) => R.albumTracks(s, i.albumId, i.market));
+export const shEp = T.mkR("get-show-episodes", "Get show episodes", z.object({ showId: z.string().min(1), limit: z.number().min(1).max(50).optional().default(20), offset: z.number().min(0).optional().default(0) }), (s, i) => R.showEpisodes(s, i.showId, i.limit, i.offset));
+export const getAf = T.mkR("get-audio-features", "Get audio features", z.object({ ids: z.string().min(1) }), (s, i) => R.audioFeatures(s, i.ids));
+export const getAa = T.mkR("get-audio-analysis", "Get audio analysis", z.object({ trackId: z.string().min(1) }), (s, i) => R.audioAnalysis(s, i.trackId));
+
+// NEW FEATURES
+export const getShare = T.mkR("get-share-link", "Generate shareable Spotify link", z.object({ uri: z.string().min(1), platform: z.enum(["spotify", "web"]).optional().default("web") }), (s, i) => {
+    const link = i.platform === "spotify" ? i.uri : `https://open.spotify.com/${i.uri.replace("spotify:", "").replace(":", "/")}`;
+    return Promise.resolve({ shareLink: link, uri: i.uri, shortUrl: link.replace("open.spotify.com", "spotify.link") });
+});
+
+export const getStats = T.mkR("get-listening-stats", "Get listening stats: total time, top genres, avg BPM", z.object({ timeRange: z.enum(["short_term", "medium_term", "long_term"]).optional().default("medium_term") }), async (s, i) => {
+    const [topTracks, topArtists] = await Promise.all([R.getTop(s, "tracks", 50, i.timeRange), R.getTop(s, "artists", 50, i.timeRange)]);
+    const genres = topArtists.items.flatMap((a: any) => a.genres || []);
+    const genreCounts = genres.reduce((acc: any, g: string) => { acc[g] = (acc[g] || 0) + 1; return acc; }, {});
+    const topGenres = Object.entries(genreCounts).sort((a: any, b: any) => b[1] - a[1]).slice(0, 5).map(([g]) => g);
+    return { totalTracks: topTracks.total, topGenres, estimatedListeningMinutes: Math.round(topTracks.total * 3.5) };
+});
+
+export const getTracksByBPM = T.mkR("get-tracks-by-bpm", "Find tracks by BPM range using audio features", z.object({ minBpm: z.number().min(60).max(200).optional().default(100), maxBpm: z.number().min(60).max(200).optional().default(140), minEnergy: z.number().min(0).max(1).optional(), maxEnergy: z.number().min(0).max(1).optional(), limit: z.number().min(1).max(50).optional().default(20) }), (s, i) => {
+    const mid = (i.minBpm + i.maxBpm) / 2;
+    const p: any = { limit: i.limit, target_tempo: mid };
+    if (i.minEnergy && i.maxEnergy) p.target_energy = (i.minEnergy + i.maxEnergy) / 2;
+    if (i.minBpm) p.min_tempo = i.minBpm;
+    if (i.maxBpm) p.max_tempo = i.maxBpm;
+    if (i.minEnergy) p.min_energy = i.minEnergy;
+    if (i.maxEnergy) p.max_energy = i.maxEnergy;
+    return R.recs(s, p);
+});
 
 export const allTools = [
-    getPlaybackStateTool,
-    transferPlaybackTool,
-    getAvailableDevicesTool,
-    getCurrentlyPlayingTrackTool,
-    startResumePlaybackTool,
-    pausePlaybackTool,
-    skipToNextTool,
-    skipToPreviousTool,
-    seekToPositionTool,
-    setRepeatModeTool,
-    setPlaybackVolumeTool,
-    togglePlaybackShuffleTool,
-    getRecentlyPlayedTracksTool,
-    getUserQueueTool,
-    addItemToPlaybackQueueTool,
-    getPlaylistTool,
-    changePlaylistDetailsTool,
-    getPlaylistItemsTool,
-    updatePlaylistItemsTool,
-    addItemsToPlaylistTool,
-    searchItemsTool,
-    getTrackTool,
-    getSeveralTracksTool,
-    getSavedTracksTool,
-    saveTracksTool,
-    removeSavedTracksTool,
-    checkSavedTracksTool,
-    getUserProfileTool,
-    getCurrentUserProfileTool,
-    getCurrentUserTopItemsTool,
-    followOrUnfollowPlaylistTool,
-    getFollowedArtistsTool,
-    followArtistsOrUsersTool,
-    unfollowArtistsOrUsersTool,
-    checkIfUserFollowsTool,
-    checkIfCurrentUserFollowsPlaylistTool
+    getPlayState, getCurrPlay, getDevs, startPlay, pausePlay, skipNext, skipPrev, seekPos, setRep, setVol, togShuf, getRec, getQue, addQue, rmQue,
+    getPl, getPlItems, getUsrPls, crPl, addPlIt, rmPlIt, folPl, unfolPl,
+    getTracks, saveTracks, rmTracks, getAlbums, saveAlbums, rmAlbums, getShows, saveShows, rmShows, getEps, rmEps, getArt, folArt, unfolArt,
+    search, getMe, getUser, getTop, fol, unfol, chkFol,
+    getRecs, getGens, getMkts, getNew, getFeat, getCats, getCatPls, artTop, artRel, artAlb, albTr, shEp, getAf, getAa,
+    getShare, getStats, getTracksByBPM
 ];

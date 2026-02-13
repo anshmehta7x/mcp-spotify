@@ -1,60 +1,29 @@
-import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
-import express, { Request, Response } from "express";
-import { spotifyMcpServer } from "./server.js";
-import axios from "axios";
-import { AuthService } from "./auth/authservice.js";
+import {
+    McpServer,
+} from "@modelcontextprotocol/sdk/server/mcp.js";
+import { authTools } from "./auth/tools.js";
+import { allTools } from "./mcp/tools.js";
 
-import { config as envConfig } from "dotenv";
+export const spotifyMcpServer = new McpServer({
+    name: "mcp-spotify",
+    version: "1.0.0",
+});
 
-const app = express();
-app.use(express.json());
-envConfig();
+// Register tools without wrapping - handlers will receive sessionId via request context
+const tools = [...authTools, ...allTools];
 
-const authService = AuthService.getInstance();
-
-app.get("/ping", async (req: Request, res: Response) => {
-    res.send("pong");
-})
-
-app.get("/callback", async (req: Request, res: Response) => {
-    const code = req.query.code as string;
-    const state = req.query.state as string;
-    if (!code || !state) {
-        res.status(400).send("Missing code or state in callback");
-        return;
-    } else {
-        try {
-            const success = await authService.receiveToken(code, state);
-            if (!success) {
-                res.status(500).send("Failed to retrieve access token");
-            }
-            res.send("Authentication successful! You can close this window.");
-        } catch (error) {
-            console.error("Error during token retrieval:", error);
-            res.status(500).send("Internal Server Error");
-            return;
+for (const tool of tools) {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    spotifyMcpServer.registerTool(
+        tool.name,
+        tool.config as any,
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        async (request: any, input: any) => {
+            // Session ID comes from MCP transport via request.sessionId
+            const sessionId = request.sessionId || "anonymous";
+            
+            // Call the original handler with our context
+            return tool.handler({ sessionId } as any, input);
         }
-    }
-});
-
-app.post("/mcp", async (req: Request, res: Response) => {
-    const transport = new StreamableHTTPServerTransport({
-        sessionIdGenerator: undefined,
-        enableJsonResponse: true,
-    });
-
-    res.on("close", () => {
-        transport.close();
-    });
-
-    await spotifyMcpServer.connect(transport);
-    await transport.handleRequest(req, res, req.body);
-});
-
-const port = parseInt(process.env.PORT || "3000");
-app.listen(port, () => {
-    console.log(`Spotify MCP Server running on http://localhost:${port}/mcp`);
-}).on("error", (error: unknown) => {
-    console.error("Server error:", error);
-    process.exit(1);
-});
+    );
+}
