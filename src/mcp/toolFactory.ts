@@ -48,5 +48,5 @@ export const pag = (max = 50) => z.object({
 });
 
 export async function sessionInfo(s: string) {
-    return { isAuth: auth.isAuthenticated(s), metadata: auth.getSessionMetadata(s) };
+    return { isAuth: auth.isAuthenticated(s) };
 }
