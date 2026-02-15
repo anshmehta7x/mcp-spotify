@@ -1,0 +1,15 @@
+services:
+  - type: web
+    name: mcp-spotify
+    env: node
+    buildCommand: npm install && npm run build
+    startCommand: npm start
+    envVars:
+      - key: NODE_VERSION
+        value: "18"
+      - key: SPOTIFY_CLIENT_ID
+        value: ""
+      - key: SPOTIFY_CLIENT_SECRET
+        value: ""
+      - key: SPOTIFY_REDIRECT_URI
+        value: "https://mcp-spotify.onrender.com/callback"

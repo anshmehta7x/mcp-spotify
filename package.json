@@ -2,8 +2,11 @@
     "name": "mcp-spotify",
     "type": "module",
     "version": "1.0.0",
-    "description": "",
-    "main": "index.js",
+    "description": "MCP server for Spotify control",
+    "main": "dist/index.js",
+    "engines": {
+        "node": ">=18.0.0"
+    },
     "scripts": {
         "dev": "ts-node src/index.ts",
         "build": "tsc",
